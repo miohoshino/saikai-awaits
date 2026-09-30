@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { supabase, supabaseConfigured } from "../lib/supabase";
+import Admin from "./Admin";
 
 const people = [
   {name:"山田 花子",area:"西海市",role:"地域クリエイター",bio:"西海の自然とテクノロジーで、地方から楽しいことをつくりたいです！",tags:["AI","釣り","動画編集"],photo:"https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=320&q=80"},
@@ -33,6 +34,7 @@ export default function Page(){
   const [message,setMessage]=useState("");
   const [tab,setTab]=useState("home");
   const [detail,setDetail]=useState(null);
+  const [adminOpen,setAdminOpen]=useState(false);
   const [busy,setBusy]=useState(true);
 
   useEffect(()=>{(async()=>{
@@ -45,6 +47,8 @@ export default function Page(){
     }
     setBusy(false);
   })();},[]);
+
+  useEffect(()=>{window.scrollTo(0,0);},[adminOpen,detail,tab]);
 
   async function loadAll(uid){
     await Promise.all([loadEntries(),loadDirectory(),loadSubmissions(uid),loadActions(uid),loadActionCounts()]);
@@ -151,7 +155,7 @@ export default function Page(){
   async function logout(){
     if(!window.confirm("ログアウトすると、この端末からは同じアカウントに戻れなくなります。本当にログアウトしますか？")) return;
     await supabase.auth.signOut();
-    setUserId(""); setEntries([]); setProfile(null); setDirectory([]); setSubmissions([]); setActions([]); setActionCounts({}); setInvite(""); setTab("home"); setDetail(null); setMessage("");
+    setUserId(""); setEntries([]); setProfile(null); setDirectory([]); setSubmissions([]); setActions([]); setActionCounts({}); setInvite(""); setTab("home"); setDetail(null); setAdminOpen(false); setMessage("");
   }
 
   const byKind=useMemo(()=>({
@@ -195,14 +199,14 @@ export default function Page(){
 
   return <main className="appStage">
     <section className="app">
-      {detail ? <DetailView detail={detail} onBack={()=>setDetail(null)} byKind={byKind} actions={actions} actionCounts={actionCounts} toggleAction={toggleAction}/> : <>
+      {adminOpen ? <Admin onBack={()=>setAdminOpen(false)} onChanged={()=>Promise.all([loadEntries(),loadSubmissions(userId)])}/> : detail ? <DetailView detail={detail} onBack={()=>setDetail(null)} byKind={byKind} actions={actions} actionCounts={actionCounts} toggleAction={toggleAction}/> : <>
       {tab==="home"&&<Home byKind={byKind} profile={profile} actionCounts={actionCounts} setTab={setTab} openDetail={setDetail}/>}
       {tab==="people"&&<People openDetail={setDetail} directory={directory}/>}
       {tab==="community"&&<Community items={byKind.community} openDetail={setDetail}/>}
       {tab==="discover"&&<Discover byKind={byKind} openDetail={setDetail}/>}
-      {tab==="me"&&<Me logout={logout} profile={profile} actions={actions} entries={entries} submissions={submissions} submitEvent={submitEvent} message={message}/>}
+      {tab==="me"&&<Me logout={logout} openAdmin={()=>setAdminOpen(true)} profile={profile} actions={actions} entries={entries} submissions={submissions} submitEvent={submitEvent} message={message}/>}
       </>}
-      {!detail && <nav className="bottomNav">
+      {!detail && !adminOpen && <nav className="bottomNav">
         {navItems.map(([id,label,icon])=><button key={id} className={tab===id?"active":""} onClick={()=>setTab(id)}>
           <span className="navIcon">{icon}</span><span>{label}</span>
         </button>)}
@@ -349,11 +353,12 @@ function Discover({byKind,openDetail}){
   </PageShell>;
 }
 
-function Me({logout,profile,actions,entries,submissions,submitEvent,message}){
+function Me({logout,openAdmin,profile,actions,entries,submissions,submitEvent,message}){
   const actionItems=actions.map(a=>({action:a.action,item:entries.find(e=>e.id===a.entry_id)})).filter(x=>x.item);
   const [showEventForm,setShowEventForm]=useState(false);
   return <PageShell kicker="MY PAGE" title="マイページ" lead="あなたの西海でのつながりと活動">
     <div className="profileCard"><div className="profileCircle">{(profile?.name||"M").slice(0,1)}</div><h3>{profile?.name||"メンバー"}</h3><p>{profile?.area||"西海市"}{profile?.organization?" · "+profile.organization:""}</p><div className="tags profileTags">{[...(profile?.tags||[]),...(profile?.skills||[])].slice(0,6).map(t=><span key={t}>{t}</span>)}</div></div>
+    {profile?.role==="admin"&&<section className="quickActions"><button className="adminEntry" onClick={openAdmin}>運営メニュー</button></section>}
     <section className="quickActions"><button onClick={()=>setShowEventForm(!showEventForm)}>＋ イベントを登録</button></section>
     {showEventForm&&<EventSubmissionForm submitEvent={submitEvent} onDone={()=>setShowEventForm(false)}/>}
     {message&&<div className="inlineMessage">{message}</div>}

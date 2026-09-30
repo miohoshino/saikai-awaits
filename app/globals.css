@@ -58,3 +58,38 @@ button{cursor:pointer}
 .inlineMessage{margin:10px 0 14px;background:#eef8ff;color:#256b98;border-radius:12px;padding:10px 12px;font-size:10px;font-weight:800}
 .mySubmissionRow{display:flex;align-items:center;justify-content:space-between;gap:10px;border:1px solid #e4edf2;border-radius:12px;padding:10px;margin-bottom:7px}.mySubmissionRow b,.mySubmissionRow small{display:block}.mySubmissionRow b{font-size:11px}.mySubmissionRow small{font-size:9px;color:#7c909d;margin-top:2px}.mySubmissionRow>span{font-size:8px;font-weight:900;color:#a66a46;background:#fff2e8;border-radius:999px;padding:5px 7px;white-space:nowrap}
 .linkCta{display:block;text-align:center;text-decoration:none}
+
+.quickActions button.adminEntry{background:var(--navy)}
+.adminPage{min-height:100%;background:#f6fafc}
+.adminHeader b{justify-self:center;font-size:15px;color:var(--navy)}
+.adminTabs{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;padding:10px 12px;background:#fff;border-bottom:1px solid var(--line);position:sticky;top:70px;z-index:15}
+.adminTabs button{border:0;border-radius:10px;background:none;padding:9px 2px;font-size:11px;font-weight:900;color:#5f7687;display:flex;align-items:center;justify-content:center;gap:4px}
+.adminTabs button.active{background:#e8f4fc;color:#0a6fb5}
+.adminTabs i{font-style:normal;background:var(--orange);color:#fff;border-radius:999px;min-width:18px;padding:1px 5px;font-size:10px}
+.adminBody{padding:14px 14px 30px}
+.adminCreate{margin:0 0 12px}
+.adminEmpty{text-align:center;color:var(--muted);font-size:12px;padding:30px 0}
+.adminList{display:grid;gap:10px}
+.adminCard{background:#fff;border:1px solid #e1ebf1;border-radius:16px;padding:14px}
+.adminMeta{display:flex;flex-wrap:wrap;align-items:center;gap:6px;font-size:10px;color:#5f7687}
+.adminMeta small{margin-left:auto;color:#8a9ca8}
+.adminKind{background:#fff0e7;color:#e7591a;border-radius:999px;padding:3px 8px;font-weight:900}
+.adminStatus{background:#edf3f6;color:#5f7687;border-radius:999px;padding:3px 8px;font-size:10px;font-weight:900;white-space:nowrap}
+.adminCard h3{font-size:15px;margin:9px 0 5px;line-height:1.35}
+.adminCard>p{font-size:12px;line-height:1.6;color:#5f7687;margin:0 0 8px}
+.adminFacts{display:flex;flex-wrap:wrap;gap:4px 12px;margin:0 0 8px;font-size:11px}
+.adminFacts dt{display:inline;color:#8a9ca8;margin-right:4px}.adminFacts dd{display:inline;margin:0;color:#214963;font-weight:700}
+.adminSource{display:inline-block;font-size:11px;font-weight:800;color:#0a6fb5;margin-bottom:10px}
+.adminActions{display:flex;justify-content:flex-end;gap:7px;flex-wrap:wrap}
+.adminActions button{padding:10px 14px;font-size:12px}
+.dangerCta{background:#fff0eb;color:#b4471d}
+.entryForm select{width:100%;border:1px solid #d4e2ea;border-radius:11px;padding:10px;background:#fff;font:inherit}
+.inviteCreated{display:grid;grid-template-columns:1fr auto;align-items:center;gap:4px 10px;background:#eef8ff;border:1px solid #cfe6f6;border-radius:14px;padding:12px 14px;margin-bottom:14px}
+.inviteCreated small{grid-column:1/-1;font-size:10px;color:#256b98;font-weight:800}
+.inviteCreated strong{font-size:20px;letter-spacing:.04em;color:var(--navy);font-family:ui-monospace,Consolas,monospace}
+.inviteCreated button{padding:9px 14px;font-size:12px}
+.inviteRow{display:grid;grid-template-columns:1fr auto auto;align-items:center;gap:8px;background:#fff;border:1px solid #e1ebf1;border-radius:14px;padding:11px 12px}
+.inviteRow b{display:block;font-family:ui-monospace,Consolas,monospace;font-size:13px}
+.inviteRow small{display:block;font-size:10px;color:#7c909d;margin-top:3px}
+.inviteRow button{padding:8px 11px;font-size:11px}
+.inviteRow.inactive{opacity:.6}
