@@ -3,6 +3,7 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+const INGEST_SECRET = Deno.env.get("INGEST_SECRET") || "";
 const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
 
 const NEGATIVE=["事故","死亡","火災","災害","避難","詐欺","犯罪","逮捕","中止","休止","廃止","通行止","断水","停電","お詫び","注意","警戒","感染","訃報","不審","被害","意見募集","パブリックコメント"];
@@ -53,7 +54,7 @@ Source: ${sourceUrl}`;
 }
 
 Deno.serve(async(req:Request)=>{
-  const supplied=req.headers.get("x-ingest-key")||"";const {data:ok}=await supabase.rpc("check_ingest_secret",{p_secret:supplied});if(!ok)return new Response("forbidden",{status:403});
+  const supplied=req.headers.get("x-ingest-key")||"";if(!INGEST_SECRET||supplied!==INGEST_SECRET)return new Response("forbidden",{status:403});
   const {data:sources,error}=await supabase.from("sources").select("id,name,url,connector,status").eq("status","approved").eq("connector","web");if(error)return Response.json({error:error.message},{status:500});
   let discovered=0,inserted=0,queued=0,skipped=0;
   for(const source of sources||[]){
@@ -65,12 +66,14 @@ Deno.serve(async(req:Request)=>{
         let excerpt="";try{const ar=await fetch(link.url,{headers:{"user-agent":"SAIKAI-AWAITS/1.1"}});if(ar.ok)excerpt=stripHtml(await ar.text()).slice(0,1400);}catch{}
         const rule=ruleClassify(link.title,source.url);const ai=await aiClassify(link.title,excerpt,source.url);const c=ai||rule;
         const hash=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(link.title+"|"+link.url));const contentHash=Array.from(new Uint8Array(hash)).map(x=>x.toString(16).padStart(2,"0")).join("");
-        const {data:item,error:itemError}=await supabase.from("source_items").insert({source_id:source.id,external_key:link.url,content_hash:contentHash,original_url:link.url,original_title:link.title,raw_excerpt:excerpt.slice(0,1000)}).select("id").single();if(itemError)continue;inserted++;
+        const classification={...c,classifier:ai?"ai":"rules"};
+        const {data:item,error:itemError}=await supabase.from("source_items").insert({source_id:source.id,external_key:link.url,content_hash:contentHash,original_url:link.url,original_title:link.title,raw_excerpt:excerpt.slice(0,1000),classification}).select("id").single();if(itemError)continue;inserted++;
         if(c.accept){
           const warnings:string[]=Array.isArray(ai?.warnings)?ai.warnings:[];if(!ai)warnings.push("rule_fallback_no_ai_key");
           const summary=(ai?.summary||excerpt.slice(0,120)||link.title).trim();
-          const candidate={kind:c.kind||"news",title:link.title,summary,body:excerpt.slice(0,3000),area:"西海市",tags:["西海市","公式情報"],source_name:source.name,source_url:link.url,classifier:ai?"ai":"rules",score:Number(c.score||0)};
-          const {error:reviewError}=await supabase.from("reviews").insert({source_item_id:item.id,status:"pending",candidate,warnings});if(!reviewError)queued++;
+          const kind=["news","event","work"].includes(c.kind)?c.kind:"news";
+          const {data:entry,error:entryError}=await supabase.from("entries").insert({kind,status:"pending",origin:"ingest",title:link.title.slice(0,140),summary:summary.slice(0,500),body:excerpt.slice(0,3000),area:"西海市",tags:["西海市","公式情報"],source_name:source.name,source_url:link.url,details:{classifier:ai?"ai":"rules",score:Number(c.score||0),warnings}}).select("id").single();
+          if(!entryError){queued++;await supabase.from("source_items").update({entry_id:entry.id}).eq("id",item.id);}
         }
       }
       await supabase.from("sources").update({last_run_at:new Date().toISOString()}).eq("id",source.id);
