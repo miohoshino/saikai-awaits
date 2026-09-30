@@ -4,12 +4,6 @@ import { useEffect, useMemo, useState } from "react";
 import { supabase, supabaseConfigured } from "../lib/supabase";
 import Admin from "./Admin";
 
-const people = [
-  {name:"山田 花子",area:"西海市",role:"地域クリエイター",bio:"西海の自然とテクノロジーで、地方から楽しいことをつくりたいです！",tags:["AI","釣り","動画編集"],photo:"https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=320&q=80"},
-  {name:"田中 健太",area:"西海町",role:"漁業",bio:"海のことならなんでも。地域の仲間と新しい挑戦を。",tags:["釣り","海","地域活動"],photo:"https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=320&q=80"},
-  {name:"佐藤 美咲",area:"大島町",role:"教育",bio:"子ども向けの学びの場づくりに関心があります。",tags:["教育","AI"],photo:"https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=320&q=80"}
-];
-
 const navItems=[
   ["home","ホーム","⌂"],
   ["people","つながる","♙"],
@@ -22,6 +16,30 @@ const ENTRY_COLUMNS="id,kind,status,title,summary,body,area,tags,details,image_u
 
 function cleanTitle(v=""){return v.replace(/^【デモ】/,"");}
 
+function toPerson(x){
+  const allTags=[...(x.tags||[]),...(x.skills||[])];
+  return {
+    id:x.id,
+    name:x.name,
+    area:x.area,
+    role:x.organization||"SAIKAI AWAITS メンバー",
+    bio:x.bio||"",
+    tags:allTags.slice(0,6),
+    rawTags:allTags,
+    avatar:x.avatar_url||""
+  };
+}
+
+function Avatar({person,size=54}){
+  if(person?.avatar) return <img className="avatar" src={person.avatar} alt="" style={{width:size,height:size}}/>;
+  return <span className="avatar avatarInitial" aria-hidden="true" style={{width:size,height:size,fontSize:size*.4}}>{(person?.name||"?").slice(0,1)}</span>;
+}
+
+function InterestButton({person,interest,className="primaryCta"}){
+  const on=interest.sent.includes(person.id);
+  return <button className={className+(on?" interestOn":"")} aria-pressed={on} onClick={e=>{e.stopPropagation();interest.toggle(person.id);}}>{on?"興味あり ✓":"興味あり"}</button>;
+}
+
 export default function Page(){
   const [userId,setUserId]=useState("");
   const [invite,setInvite]=useState("");
@@ -31,6 +49,8 @@ export default function Page(){
   const [submissions,setSubmissions]=useState([]);
   const [actions,setActions]=useState([]);
   const [actionCounts,setActionCounts]=useState({});
+  const [sentInterests,setSentInterests]=useState([]);
+  const [receivedInterests,setReceivedInterests]=useState([]);
   const [message,setMessage]=useState("");
   const [tab,setTab]=useState("home");
   const [detail,setDetail]=useState(null);
@@ -51,7 +71,7 @@ export default function Page(){
   useEffect(()=>{window.scrollTo(0,0);},[adminOpen,detail,tab]);
 
   async function loadAll(uid){
-    await Promise.all([loadEntries(),loadDirectory(),loadSubmissions(uid),loadActions(uid),loadActionCounts()]);
+    await Promise.all([loadEntries(),loadDirectory(),loadSubmissions(uid),loadActions(uid),loadActionCounts(),loadInterests(uid)]);
   }
 
   async function loadEntries(){
@@ -86,6 +106,23 @@ export default function Page(){
     const counts={};
     for(const row of data||[]) counts[row.entry_id]={...counts[row.entry_id],[row.action]:Number(row.count)};
     setActionCounts(counts);
+  }
+
+  async function loadInterests(uid){
+    const [{data:sent},{data:received}]=await Promise.all([
+      supabase.from("member_interests").select("to_member").eq("from_member",uid),
+      supabase.rpc("get_received_interests")
+    ]);
+    setSentInterests((sent||[]).map(x=>x.to_member));
+    setReceivedInterests(received||[]);
+  }
+
+  async function toggleInterest(memberId){
+    if(!memberId||memberId===userId) return;
+    const {error}=sentInterests.includes(memberId)
+      ? await supabase.from("member_interests").delete().match({from_member:userId,to_member:memberId})
+      : await supabase.from("member_interests").insert({from_member:userId,to_member:memberId});
+    if(!error) await loadInterests(userId);
   }
 
   async function saveProfile(payload){
@@ -155,8 +192,12 @@ export default function Page(){
   async function logout(){
     if(!window.confirm("ログアウトすると、この端末からは同じアカウントに戻れなくなります。本当にログアウトしますか？")) return;
     await supabase.auth.signOut();
-    setUserId(""); setEntries([]); setProfile(null); setDirectory([]); setSubmissions([]); setActions([]); setActionCounts({}); setInvite(""); setTab("home"); setDetail(null); setAdminOpen(false); setMessage("");
+    setUserId(""); setEntries([]); setProfile(null); setDirectory([]); setSubmissions([]); setActions([]); setActionCounts({}); setSentInterests([]); setReceivedInterests([]); setInvite(""); setTab("home"); setDetail(null); setAdminOpen(false); setMessage("");
   }
+
+  const others=useMemo(()=>directory.filter(x=>x.id!==userId).map(toPerson),[directory,userId]);
+  const receivedIds=useMemo(()=>receivedInterests.map(x=>x.id),[receivedInterests]);
+  const interest={sent:sentInterests,received:receivedIds,toggle:toggleInterest};
 
   const byKind=useMemo(()=>({
     event:entries.filter(x=>x.kind==="event"),
@@ -199,12 +240,12 @@ export default function Page(){
 
   return <main className="appStage">
     <section className="app">
-      {adminOpen ? <Admin onBack={()=>setAdminOpen(false)} onChanged={()=>Promise.all([loadEntries(),loadSubmissions(userId)])}/> : detail ? <DetailView detail={detail} onBack={()=>setDetail(null)} byKind={byKind} actions={actions} actionCounts={actionCounts} toggleAction={toggleAction}/> : <>
-      {tab==="home"&&<Home byKind={byKind} profile={profile} actionCounts={actionCounts} setTab={setTab} openDetail={setDetail}/>}
-      {tab==="people"&&<People openDetail={setDetail} directory={directory}/>}
+      {adminOpen ? <Admin onBack={()=>setAdminOpen(false)} onChanged={()=>Promise.all([loadEntries(),loadSubmissions(userId)])}/> : detail ? <DetailView detail={detail} onBack={()=>setDetail(null)} byKind={byKind} actions={actions} actionCounts={actionCounts} toggleAction={toggleAction} interest={interest}/> : <>
+      {tab==="home"&&<Home byKind={byKind} profile={profile} others={others} actionCounts={actionCounts} setTab={setTab} openDetail={setDetail}/>}
+      {tab==="people"&&<People openDetail={setDetail} others={others} interest={interest}/>}
       {tab==="community"&&<Community items={byKind.community} openDetail={setDetail}/>}
       {tab==="discover"&&<Discover byKind={byKind} openDetail={setDetail}/>}
-      {tab==="me"&&<Me logout={logout} openAdmin={()=>setAdminOpen(true)} profile={profile} actions={actions} entries={entries} submissions={submissions} submitEvent={submitEvent} message={message}/>}
+      {tab==="me"&&<Me logout={logout} openAdmin={()=>setAdminOpen(true)} openDetail={setDetail} receivedInterests={receivedInterests} interest={interest} profile={profile} actions={actions} entries={entries} submissions={submissions} submitEvent={submitEvent} message={message}/>}
       </>}
       {!detail && !adminOpen && <nav className="bottomNav">
         {navItems.map(([id,label,icon])=><button key={id} className={tab===id?"active":""} onClick={()=>setTab(id)}>
@@ -240,7 +281,10 @@ function attendance(item,actionCounts){
   return capacity?`${going} / ${capacity}人`:`${going}人`;
 }
 
-function Home({byKind,profile,actionCounts,setTab,openDetail}){
+function Home({byKind,profile,others,actionCounts,setTab,openDetail}){
+  const myTags=[...(profile?.tags||[]),...(profile?.skills||[])];
+  const shared=p=>p.rawTags.filter(t=>myTags.includes(t)).length;
+  const person=[...others].sort((a,b)=>shared(b)-shared(a))[0];
   const event=byKind.event[0];
   const community=byKind.community[0]||{title:"西海フィッシングCLUB",summary:"西海の海で釣りを楽しむコミュニティです。初心者も大歓迎！",details:{members:148}};
   const work=byKind.work[0]||{title:"動画編集できる人募集",summary:"西海の魅力を伝えるショート動画の編集をお願いします！",details:{reward:"30,000円"}};
@@ -275,14 +319,14 @@ function Home({byKind,profile,actionCounts,setTab,openDetail}){
 
       <div className="sectionHead recommendationsHead"><div><h2>あなたへのおすすめ</h2><span></span></div><button onClick={()=>setTab("discover")}>すべて見る 〉</button></div>
 
-      <div className="recommendGrid">
-        <article className="recommendCard clickable" onClick={()=>openDetail({kind:"person",item:people[0]})}>
-          <div className="personTop"><img src={people[0].photo} alt=""/><span className="addPerson">♙+</span></div>
+      <div className="recommendGrid" style={{gridTemplateColumns:`repeat(${person?3:2},1fr)`}}>
+        {person&&<article className="recommendCard clickable" onClick={()=>openDetail({kind:"person",item:person})}>
+          <div className="personTop"><Avatar person={person} size={56}/><span className="addPerson">♙+</span></div>
           <div className="greenKicker">♣ 気の合いそうな人</div>
-          <h3>山田 花子<small>さん</small></h3>
-          <div className="tags">{people[0].tags.map(t=><span key={t}>{t}</span>)}</div>
-          <p>{people[0].bio}</p>
-        </article>
+          <h3>{person.name}<small>さん</small></h3>
+          <div className="tags">{person.tags.slice(0,3).map(t=><span key={t}>{t}</span>)}</div>
+          <p>{person.bio}</p>
+        </article>}
 
         <article className="recommendCard clickable" onClick={()=>openDetail({kind:"community",item:community})}>
           <img className="cardImage" src="https://images.unsplash.com/photo-1498654896293-37aacf113fd9?auto=format&fit=crop&w=700&q=80" alt=""/>
@@ -316,22 +360,14 @@ function Home({byKind,profile,actionCounts,setTab,openDetail}){
   </div>;
 }
 
-function People({openDetail,directory}){
+function People({openDetail,others,interest}){
   const [q,setQ]=useState("");
-  const live=(directory||[]).map((x,i)=>({
-    id:x.id,
-    name:x.name,
-    area:x.area,
-    role:x.organization||"SAIKAI AWAITS メンバー",
-    bio:x.bio||"",
-    tags:[...(x.tags||[]),...(x.skills||[])].slice(0,6),
-    photo:x.avatar_url||people[i%people.length]?.photo
-  }));
-  const base=live.length?live:people;
-  const list=base.filter(x=>JSON.stringify(x).toLowerCase().includes(q.toLowerCase()));
+  const list=others.filter(x=>[x.name,x.area,x.role,x.bio,...x.rawTags].join(" ").toLowerCase().includes(q.toLowerCase()));
   return <PageShell kicker="PEOPLE" title="つながる" lead="西海の人を、得意なことや興味から見つける。">
-    <input className="searchInput" value={q} onChange={e=>setQ(e.target.value)} placeholder="人・得意なこと・興味で検索"/>
-    <div className="listCards">{list.map(p=><article className="personRow clickable" key={p.name} onClick={()=>openDetail({kind:"person",item:p})}><img src={p.photo} alt=""/><div><h3>{p.name}</h3><small>{p.area} · {p.role}</small><p>{p.bio}</p><div className="tags">{p.tags.map(t=><span key={t}>{t}</span>)}</div></div><button onClick={e=>e.stopPropagation()}>つながる</button></article>)}</div>
+    <input className="searchInput" value={q} onChange={e=>setQ(e.target.value)} placeholder="人・得意なこと・興味で検索" aria-label="メンバーを検索"/>
+    {!others.length?<p className="emptyNote">まだ他のメンバーがいません。招待した人が参加すると、ここに表示されます。</p>:
+    !list.length?<p className="emptyNote">条件に合うメンバーが見つかりませんでした。</p>:
+    <div className="listCards">{list.map(p=><article className="personRow clickable" key={p.id} onClick={()=>openDetail({kind:"person",item:p})}><Avatar person={p}/><div><h3>{p.name}{interest.received.includes(p.id)&&<em className="interestBadge">あなたに興味あり</em>}</h3><small>{p.area} · {p.role}</small><p>{p.bio}</p><div className="tags">{p.tags.map(t=><span key={t}>{t}</span>)}</div></div><InterestButton person={p} interest={interest} className="rowInterest"/></article>)}</div>}
   </PageShell>;
 }
 
@@ -353,7 +389,7 @@ function Discover({byKind,openDetail}){
   </PageShell>;
 }
 
-function Me({logout,openAdmin,profile,actions,entries,submissions,submitEvent,message}){
+function Me({logout,openAdmin,openDetail,receivedInterests,interest,profile,actions,entries,submissions,submitEvent,message}){
   const actionItems=actions.map(a=>({action:a.action,item:entries.find(e=>e.id===a.entry_id)})).filter(x=>x.item);
   const [showEventForm,setShowEventForm]=useState(false);
   return <PageShell kicker="MY PAGE" title="マイページ" lead="あなたの西海でのつながりと活動">
@@ -362,6 +398,7 @@ function Me({logout,openAdmin,profile,actions,entries,submissions,submitEvent,me
     <section className="quickActions"><button onClick={()=>setShowEventForm(!showEventForm)}>＋ イベントを登録</button></section>
     {showEventForm&&<EventSubmissionForm submitEvent={submitEvent} onDone={()=>setShowEventForm(false)}/>}
     {message&&<div className="inlineMessage">{message}</div>}
+    <section className="myActivity"><h2>あなたに興味ありのメンバー</h2>{receivedInterests.length?receivedInterests.map(x=>{const p=toPerson(x);return <div className="myInterestRow clickable" key={p.id} onClick={()=>openDetail({kind:"person",item:p})}><Avatar person={p} size={38}/><div><b>{p.name}</b><small>{p.area} · {p.role}</small></div>{interest.sent.includes(p.id)?<span className="mutualBadge">お互いに興味あり</span>:<InterestButton person={p} interest={interest} className="rowInterest"/>}</div>;}):<p>まだいません。プロフィールを充実させると見つけてもらいやすくなります。</p>}</section>
     <section className="myActivity"><h2>自分の登録</h2>{submissions?.length?submissions.map(x=><div className="mySubmissionRow" key={x.id}><div><b>{cleanTitle(x.title)}</b><small>{x.area||"西海市"}</small></div><span>{({pending:"確認待ち",published:"公開中",rejected:"見送り",archived:"終了"})[x.status]||x.status}</span></div>):<p>まだ登録はありません。</p>}</section>
     <section className="myActivity"><h2>参加・保存・興味あり</h2>{actionItems.length?actionItems.map(x=><div className="myActionRow" key={x.action+x.item.id}><span>{({going:"参加予定",interested:"興味あり",joined:"参加中",saved:"保存",work_interest:"仕事に興味",challenge_interest:"チャレンジに興味"})[x.action]||x.action}</span><b>{cleanTitle(x.item.title)}</b></div>):<p>まだありません。気になるイベントや活動を保存してみてください。</p>}</section>
     <button className="logout" onClick={logout}>ログアウト</button>
@@ -415,7 +452,7 @@ function ProfileOnboarding({saveProfile}){
   </form></section></div>;
 }
 
-function DetailView({detail,onBack,byKind,actions,actionCounts,toggleAction}){
+function DetailView({detail,onBack,byKind,actions,actionCounts,toggleAction,interest}){
   const {kind,item}=detail;
   const title=cleanTitle(item?.title||item?.name||"");
   const images={
@@ -430,21 +467,16 @@ function DetailView({detail,onBack,byKind,actions,actionCounts,toggleAction}){
     return <div className="detailPage">
       <DetailHeader onBack={onBack}/>
       <section className="personDetailHero">
-        <img src={item.photo} alt=""/>
+        <Avatar person={item} size={110}/>
         <h1>{item.name}</h1>
         <p>{item.area} · {item.role}</p>
         <div className="tags detailTags">{(item.tags||[]).map(t=><span key={t}>{t}</span>)}</div>
-        <button className="primaryCta">つながる</button>
+        {interest.received.includes(item.id)&&<p className="interestNote">{interest.sent.includes(item.id)?"お互いに興味ありです":"この人はあなたに興味ありです"}</p>}
+        {item.id&&<InterestButton person={item} interest={interest}/>}
       </section>
       <section className="detailBody">
-        <DetailBlock title="この人について"><p>{item.bio}</p></DetailBlock>
+        <DetailBlock title="この人について"><p>{item.bio||"まだ自己紹介がありません。"}</p></DetailBlock>
         <DetailBlock title="興味・できること"><div className="detailChips">{(item.tags||[]).map(t=><span key={t}>{t}</span>)}</div></DetailBlock>
-        <DetailBlock title="参加しているコミュニティ">
-          <RelatedRows items={(byKind.community||[]).slice(0,2)} empty="西海フィッシングCLUB / AI CLUB SAIKAI"/>
-        </DetailBlock>
-        <DetailBlock title="最近の関わり">
-          <RelatedRows items={(byKind.event||[]).slice(0,2)} empty="地域イベントやプロジェクトへの参加履歴がここに表示されます。"/>
-        </DetailBlock>
       </section>
     </div>;
   }
