@@ -85,3 +85,38 @@ from (values
    array['ランニング','朝活'], 9, '7:00 - 9:30', '大瀬戸 総合運動公園', '500円（朝ごはん代）', 15)
 ) as v(title, summary, body, tags, offset_days, time, venue, price, capacity)
 join public.entries c on c.title = '西海ランニング部' and c.kind = 'community';
+
+-- Dummy Varygood (Instagram) posts shown in AWAITS news until real ingestion is enabled
+insert into public.entries (kind, status, origin, title, summary, body, area, tags, image_url, source_name, source_url, published_at, details)
+select 'news', 'published', 'ingest', v.title, v.summary, v.body || E'
+
+（ダミーデータ：本取り込み前の表示確認用）', '西海市',
+       array['Varygood'] || v.tags, v.image, 'Varygood（Instagram）', 'https://www.instagram.com/varygood_saikai/',
+       (v.posted || 'T18:00:00+09:00')::timestamptz, jsonb_build_object('dummy', true, 'media_type', 'CAROUSEL_ALBUM')
+from (values
+  ('2026-06-03', '西海市内外の魅力が詰まった「SAIKAI MARKET」へ行ってきました！',
+   'みかんドームで開催された「SAIKAI MARKET」。市内外から約30店舗が集結しました。',
+   E'みかんドームで開催された「SAIKAI MARKET」に行ってきました。
+市内外から約30店舗が集まり、思い思いの時間を過ごす人でにぎわっていました。',
+   '/images/top-people.jpg', array['西海市','SAIKAIMARKET']),
+  ('2026-05-19', '西海市の地底へ— 3,000万年前の海が、洞窟になった',
+   '国の天然記念物「七ツ釜鍾乳洞」。3,000万年前の海の底が、いまは洞窟に。',
+   E'西海市には、国の天然記念物に指定されている鍾乳洞があります。その名も七ツ釜鍾乳洞。',
+   '/images/top-discover.jpg', array['西海市','七ツ釜鍾乳洞']),
+  ('2026-03-30', '新西海橋のガラス床は本当に怖い？高さ32mから渦潮をのぞくスリル体験',
+   '「ちょっと大げさなんじゃないの？」と思いながら、ガラス床に乗ってみました。',
+   E'新西海橋の歩道にあるガラス床。高さ32mから、足元の渦潮をのぞくことができます。',
+   '/images/top-news.jpg', array['西海市','新西海橋']),
+  ('2026-03-26', '終わる前にぜひ行ってみて！1度は訪れたい池島炭鉱',
+   '池島炭鉱の坑内体験ツアーは2027年3月末で終了予定。いまのうちに。',
+   E'船で島に渡り、実際の坑道をトロッコで進む貴重な体験。気になっていた人は早めの計画を。',
+   '/images/top-me.jpg', array['池島','炭鉱']),
+  ('2026-03-25', '西海市の「もうひとつの顔」——かつて東洋一の橋と、日本有数の急潮の迫力',
+   '「東洋一」「世界初」「国の重要文化財」。西海橋のすごいところを紹介します。',
+   E'「東洋一」「世界初」「国の重要文化財」と、とんでもない肩書きを持つ、すごい場所なんです。',
+   '/images/top-home.jpg', array['西海市','西海橋']),
+  ('2026-02-02', '西海市で走る楽しさを発見！陸上教室 西海アスリート',
+   '陸上の基本動作を中心に、いろいろな道具や動きを取り入れて、楽しみながら体を動かします。',
+   E'陸上競技を基礎から楽しく学べる陸上教室「西海アスリート」。',
+   '/images/top-community.jpg', array['西海市','陸上教室'])
+) as v(posted, title, summary, body, image, tags);

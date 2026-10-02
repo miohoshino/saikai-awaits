@@ -191,3 +191,12 @@ body{background:#edf2f5}
 .planBadge{font-size:9px;font-weight:900;color:#fff;background:#0a6fb5;border-radius:999px;padding:4px 7px;white-space:nowrap}
 .planEmpty{font-size:12px;color:var(--muted);margin:0 2px 10px}
 .planSub{font-size:12px;color:#41637b;margin:14px 2px 7px}
+
+.newsCard.withImage{display:grid;grid-template-columns:88px 1fr;column-gap:12px}
+.newsCard.withImage>*:not(.newsThumb){grid-column:2}
+.newsThumb{grid-row:1/span 4;width:88px;height:110px;object-fit:cover;border-radius:12px;background:#eef4f7}
+.newsDetailImage{display:block;width:100%;border-radius:16px;margin-bottom:6px}
+.preLine{white-space:pre-line}
+.newsCard.withImage h3,.newsCard.withImage p{display:-webkit-box;-webkit-box-orient:vertical;overflow:hidden}
+.newsCard.withImage h3{-webkit-line-clamp:3}
+.newsCard.withImage p{-webkit-line-clamp:2}

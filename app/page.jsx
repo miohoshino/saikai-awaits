@@ -465,7 +465,7 @@ function Home({ctx,profile,others,receivedCount}){
       <SectionHead title="西海でいま起きていること" onMore={()=>go("news")}/>
       <div className="newsList">
         {news.map((n,i)=><article className="newsRow clickable" key={n.id} onClick={()=>openDetail({kind:n.kind,item:n})}>
-          <img src={i%2===0?"https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=480&q=80":"https://images.unsplash.com/photo-1601004890684-d8cbf643f5f2?auto=format&fit=crop&w=480&q=80"} alt=""/>
+          <img src={n.image_url||(i%2===0?"https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=480&q=80":"https://images.unsplash.com/photo-1601004890684-d8cbf643f5f2?auto=format&fit=crop&w=480&q=80")} alt="" loading="lazy"/>
           <div className="newsBody"><div className={n.kind==="work"?"orangeLabel":"blueLabel"}>{KIND_LABELS[n.kind]}</div><h3>{cleanTitle(n.title)}</h3><p>{n.summary}</p></div>
           <div className="newsAside"><small>{i===0?"2時間前":"5時間前"}</small><span>♥ {i===0?28:42}　○ {i===0?5:3}</span></div>
         </article>)}
@@ -596,8 +596,9 @@ function NewsPage({ctx}){
 }
 
 function NewsCard({item,openDetail}){
-  return <article className="newsCard clickable" onClick={()=>openDetail({kind:item.kind,item})}>
-    <div className="newsCardMeta"><span className={item.kind==="work"?"kindTag workTag":"kindTag"}>{KIND_LABELS[item.kind]}</span><small>{formatDay(item.published_at)}</small></div>
+  return <article className={"newsCard clickable"+(item.image_url?" withImage":"")} onClick={()=>openDetail({kind:item.kind,item})}>
+    {item.image_url&&<img className="newsThumb" src={item.image_url} alt="" loading="lazy"/>}
+    <div className="newsCardMeta"><span className={item.kind==="work"?"kindTag workTag":"kindTag"}>{item.source_url?.includes("instagram.com")?"Varygood":KIND_LABELS[item.kind]}</span><small>{formatDay(item.published_at)}</small></div>
     <h3>{cleanTitle(item.title)}</h3>
     {item.summary&&<p>{item.summary}</p>}
     {item.kind==="work"&&item.details?.reward&&<b className="newsReward">報酬 {item.details.reward}</b>}
@@ -821,9 +822,10 @@ function DetailView({detail,onBack,ctx}){
       </>}
 
       {kind==="news" && <>
-        <DetailBlock title="西海のGOOD NEWS"><p>{item?.body||item?.summary}</p></DetailBlock>
+        {item?.image_url&&<img className="newsDetailImage" src={item.image_url} alt=""/>}
+        <DetailBlock title={item?.source_name||"西海のGOOD NEWS"}><p className="preLine">{item?.body||item?.summary}</p></DetailBlock>
         <DetailBlock title="関連する場所"><div className="detailChips"><span>{item?.area||"西海市"}</span>{(item?.tags||[]).map(t=><span key={t}>{t}</span>)}</div></DetailBlock>
-        {item?.source_url&&<a className="secondaryCta fullCta linkCta" href={item.source_url} target="_blank" rel="noopener noreferrer">元の記事を見る</a>}
+        {item?.source_url&&<a className="secondaryCta fullCta linkCta" href={item.source_url} target="_blank" rel="noopener noreferrer">{item.source_url.includes("instagram.com")?"Instagramで見る":"元の記事を見る"}</a>}
         <button className="primaryCta fullCta" onClick={()=>toggleAction(item?.id,"saved")}>{on("saved")?"保存済み ✓":"保存"}</button>
       </>}
 
