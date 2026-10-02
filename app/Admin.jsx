@@ -11,7 +11,7 @@ const DETAIL_FIELDS={
   work:[["reward","報酬","text"],["type","形態","text"],["organization","依頼元","text"]],
   news:[],community:[],challenge:[]
 };
-const ADMIN_ENTRY_COLUMNS="id,kind,status,origin,title,summary,body,area,tags,details,image_url,source_name,source_url,review_note,published_at,created_at,submitter:members!entries_submitted_by_fkey(name)";
+const ADMIN_ENTRY_COLUMNS="id,kind,status,origin,title,summary,body,area,tags,details,image_url,source_name,source_url,community_id,review_note,published_at,created_at,submitter:members!entries_submitted_by_fkey(name)";
 
 const TABS=[["pending","確認待ち"],["published","公開中"],["closed","見送り・終了"],["invites","招待コード"]];
 
@@ -51,9 +51,12 @@ function EntryList({statuses,allowCreate,onChanged}){
   const [loading,setLoading]=useState(true);
   const [editing,setEditing]=useState(null);
   const [error,setError]=useState("");
+  const [communities,setCommunities]=useState([]);
 
   async function load(){
     setLoading(true);
+    const {data:hosts}=await supabase.from("entries").select("id,kind,title").in("kind",["community","challenge"]).eq("status","published").order("title");
+    setCommunities(hosts||[]);
     const {data,error}=await supabase.from("entries").select(ADMIN_ENTRY_COLUMNS).in("status",statuses).order("created_at",{ascending:false});
     if(error) setError("読み込めませんでした。");
     setItems(data||[]); setLoading(false);
@@ -75,7 +78,8 @@ function EntryList({statuses,allowCreate,onChanged}){
     const payload={
       kind:values.kind,title:values.title.trim(),summary:values.summary.trim(),body:values.body.trim(),
       area:values.area.trim(),tags:splitList(values.tags),image_url:values.image_url.trim(),
-      source_url:values.source_url.trim(),details:{...(item?.details||{}),...values.details}
+      source_url:values.source_url.trim(),details:{...(item?.details||{}),...values.details},
+      community_id:values.kind==="event"&&values.community_id?values.community_id:null
     };
     const {error}=item
       ? await supabase.from("entries").update(payload).eq("id",item.id)
@@ -84,7 +88,7 @@ function EntryList({statuses,allowCreate,onChanged}){
     setError(""); setEditing(null); await load(); await onChanged(); return true;
   }
 
-  if(editing) return <EntryEditor item={editing==="new"?null:editing} onSave={save} onCancel={()=>{setEditing(null);setError("");}} error={error}/>;
+  if(editing) return <EntryEditor item={editing==="new"?null:editing} communities={communities} onSave={save} onCancel={()=>{setEditing(null);setError("");}} error={error}/>;
 
   return <>
     {allowCreate&&<button className="primaryCta fullCta adminCreate" onClick={()=>setEditing("new")}>＋ 運営として新規作成</button>}
@@ -119,10 +123,10 @@ function EntryList({statuses,allowCreate,onChanged}){
   </>;
 }
 
-function EntryEditor({item,onSave,onCancel,error}){
+function EntryEditor({item,communities,onSave,onCancel,error}){
   const [values,setValues]=useState({
     kind:item?.kind||"event",title:item?.title||"",summary:item?.summary||"",body:item?.body||"",
-    area:item?.area||"",tags:(item?.tags||[]).join(", "),image_url:item?.image_url||"",source_url:item?.source_url||"",
+    area:item?.area||"",tags:(item?.tags||[]).join(", "),image_url:item?.image_url||"",source_url:item?.source_url||"",community_id:item?.community_id||"",
     details:Object.fromEntries(Object.values(DETAIL_FIELDS).flat().map(([k])=>[k,item?.details?.[k]??""]))
   });
   const [saving,setSaving]=useState(false);
@@ -148,6 +152,7 @@ function EntryEditor({item,onSave,onCancel,error}){
       <label>エリア<input maxLength={80} value={values.area} onChange={e=>set("area",e.target.value)}/></label>
       <label>タグ（カンマ区切り）<input value={values.tags} onChange={e=>set("tags",e.target.value)}/></label>
     </div>
+    {values.kind==="event"&&<label>主催コミュニティ・チャレンジ<select value={values.community_id} onChange={e=>set("community_id",e.target.value)}><option value="">なし（SAIKAI AWAITS 主催）</option>{communities.map(c=><option key={c.id} value={c.id}>{KIND_LABELS[c.kind]}：{c.title}</option>)}</select></label>}
     {(DETAIL_FIELDS[values.kind]||[]).length>0&&<div className="formTwo">
       {DETAIL_FIELDS[values.kind].map(([k,label,type])=><label key={k}>{label}<input type={type} min={type==="number"?0:undefined} value={values.details[k]} onChange={e=>setDetail(k,e.target.value)}/></label>)}
     </div>}
