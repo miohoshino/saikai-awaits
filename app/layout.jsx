@@ -11,7 +11,7 @@ const zenMaru = Zen_Maru_Gothic({
 
 export const metadata = {
   title: "SAIKAI AWAITS",
-  description: "西海の人・イベント・コミュニティ・仕事をつなぐ会員制ネットワーク"
+  description: "西海の人とコミュニティをつなぐ会員制ネットワーク"
 };
 
 export default function RootLayout({ children }) {
