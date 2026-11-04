@@ -194,19 +194,17 @@ export default function Page(){
   }
 
   if(!userId){
-    return <main className="gate">
-      <section className="gateLeft">
-        <Logo/>
-        <span className="gateBadge">INVITATION ONLY</span>
-        <h1>西海にいるなら、<br/>ここに入っておく。</h1>
-        <p>SAIKAIをここから探しに行こう。<br/>西海の「知りたい」と「つながりたい」をひとつの場所に。</p>
-      </section>
-      <section className="gateCard">
-        <h2>招待コードを入力</h2>
-        <p>メールアドレスは不要です。</p>
-        <input value={invite} onChange={e=>setInvite(e.target.value)} onKeyDown={e=>e.key==="Enter"&&enter()} placeholder="招待コード" aria-label="招待コード" autoFocus/>
-        <button onClick={enter} disabled={busy||!invite.trim()}>{busy?"確認中…":"SAIKAI AWAITS に入る"}</button>
-        {message&&<div className="gateMessage">{message}</div>}
+    return <main className="gate gatePop">
+      <Confetti/>
+      <section className="gateInner">
+        <h1 className="gateLogo">SAIKAI<span>AWAITS</span></h1>
+        <p className="gateTagline"><span>ここで会おう。</span><span>ここから探そう。</span></p>
+        <form className="gateCode" onSubmit={e=>{e.preventDefault();enter();}}>
+          <label htmlFor="invite">招待コード</label>
+          <input id="invite" value={invite} onChange={e=>setInvite(e.target.value)} placeholder="saikai-xxxx" autoComplete="off" autoFocus/>
+          <button disabled={busy||!invite.trim()}>{busy?"確認中…":"入る"}</button>
+          {message&&<div className="gateMessage">{message}</div>}
+        </form>
       </section>
     </main>;
   }
@@ -251,6 +249,22 @@ function Logo(){
       <div className="logoTag">つながる、見つかる、好きになる。西海のくらしのネットワーク</div>
     </div>
   </div>;
+}
+
+// Pop confetti backdrop (new design, docs/mockups/redesign-v1.html).
+function Confetti(){
+  return <svg className="confetti" viewBox="0 0 400 800" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+    <rect x="28" y="60" width="40" height="11" rx="5.5" fill="#ff4f9a" transform="rotate(-24 48 65)"/>
+    <circle cx="350" cy="90" r="12" fill="#ffcf2e"/>
+    <rect x="300" y="170" width="32" height="10" rx="5" fill="#1fb57a" transform="rotate(30 316 175)"/>
+    <circle cx="80" cy="190" r="7" fill="#0d2b4e"/>
+    <path d="M70 690 l12 -24 l12 24 z" fill="#ffcf2e"/>
+    <circle cx="340" cy="700" r="16" fill="none" stroke="#ff4f9a" strokeWidth="6"/>
+    <rect x="36" y="590" width="36" height="10" rx="5" fill="#0d2b4e" transform="rotate(14 54 595)"/>
+    <rect x="322" y="580" width="10" height="36" rx="5" fill="#1fb57a" transform="rotate(20 327 598)"/>
+    <path d="M330 330 l10 -20 l10 20 z" fill="#ff4f9a"/>
+    <rect x="20" y="420" width="10" height="30" rx="5" fill="#ffcf2e" transform="rotate(-18 25 435)"/>
+  </svg>;
 }
 
 function PageHero({image,kicker,title,lead}){

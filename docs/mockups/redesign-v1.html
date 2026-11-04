@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SAIKAI AWAITS 画面イメージ</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&family=Zen+Maru+Gothic:wght@500;700;900&display=swap" rel="stylesheet">
+<style>
+:root{
+  /* Layout: three phone screens side by side on a sky-blue confetti board; one visual world, light only. */
+  --sky:#cdeffd;
+  --ink:#0d2b4e;
+  --pink:#ff4f9a;
+  --sun:#ffcf2e;
+  --leaf:#1fb57a;
+  --card:#ffffff;
+  --muted:#5d7690;
+  --display:"Dela Gothic One","Zen Maru Gothic","Hiragino Maru Gothic ProN",sans-serif;
+  --body:"Zen Maru Gothic","Hiragino Maru Gothic ProN","Yu Gothic",sans-serif;
+  color-scheme:light;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:#eef7fb;color:var(--ink);font-family:var(--body);font-weight:500;line-height:1.6}
+.board{max-width:1180px;margin:0 auto;padding:32px 16px 48px;display:grid;gap:28px}
+.board>header h1{font-family:var(--display);font-weight:400;font-size:26px;margin:0;text-wrap:balance}
+.board>header p{margin:4px 0 0;color:var(--muted);font-size:14px}
+.screens{display:flex;flex-wrap:wrap;gap:28px;justify-content:center;align-items:flex-start}
+figure{margin:0;display:grid;gap:10px;justify-items:center}
+figcaption{font-weight:900;font-size:14px}
+figcaption small{display:block;font-weight:500;color:var(--muted);text-align:center}
+
+.phone{position:relative;width:340px;max-width:100%;height:700px;border-radius:40px;background:var(--sky);overflow:hidden;border:6px solid #fff;box-shadow:0 18px 40px rgba(13,43,78,.16)}
+.scroll{position:relative;height:100%;overflow-y:auto;padding:28px 18px 32px;display:grid;gap:14px;align-content:start;scrollbar-width:none}
+.scroll::-webkit-scrollbar{display:none}
+.confetti{position:absolute;inset:0;pointer-events:none}
+
+/* gate */
+.gate .scroll{align-content:center;justify-items:center;text-align:center;gap:22px;height:100%}
+.logo{font-family:var(--display);font-size:40px;line-height:1.05;letter-spacing:.01em;margin:0}
+.logo span{display:block;color:var(--pink)}
+.tag{display:grid;gap:2px;font-weight:900;font-size:20px}
+.codeBox{width:100%;display:grid;gap:10px;background:var(--card);border-radius:22px;padding:16px;box-shadow:0 4px 0 rgba(13,43,78,.08)}
+.codeBox label{font-size:13px;font-weight:700;text-align:left}
+.codeBox input{font:inherit;border:2px solid #d8e7f0;border-radius:14px;padding:12px;width:100%}
+.btn{font:inherit;font-weight:900;border:0;border-radius:999px;padding:14px;background:var(--ink);color:#fff;cursor:pointer;width:100%}
+.btn.pink{background:var(--pink)}
+.btn:focus-visible,.link:focus-visible,input:focus-visible{outline:3px solid var(--sun);outline-offset:2px}
+
+/* shared profile / club */
+.hero{display:grid;justify-items:center;text-align:center;gap:6px}
+.avatar{width:96px;height:96px;border-radius:50%;background:var(--sun);display:grid;place-items:center;font-family:var(--display);font-size:40px;border:4px solid #fff}
+.name{font-family:var(--display);font-weight:400;font-size:24px;margin:2px 0 0;text-wrap:balance}
+.sub{font-size:13px;font-weight:700;color:var(--muted);margin:0}
+.chips{display:flex;flex-wrap:wrap;gap:6px;justify-content:center}
+.chip{background:#fff;border-radius:999px;padding:4px 10px;font-size:12px;font-weight:700}
+.chip.hot{background:var(--sun)}
+.chip.ok{background:var(--leaf);color:#fff}
+.icons{display:flex;gap:12px;justify-content:center}
+.icon{width:36px;height:36px;border-radius:50%;border:2.5px solid var(--ink);display:grid;place-items:center;font-weight:900;font-size:13px}
+.link{display:flex;align-items:center;justify-content:center;gap:8px;background:var(--card);border-radius:18px;padding:16px;font-weight:900;font-size:15px;color:var(--ink);text-decoration:none;box-shadow:0 4px 0 rgba(13,43,78,.08)}
+.link small{font-weight:500;color:var(--muted)}
+.card{background:var(--card);border-radius:22px;padding:14px 16px;display:grid;gap:6px;box-shadow:0 4px 0 rgba(13,43,78,.08)}
+.card h3{margin:0;font-size:13px;font-weight:900;color:var(--pink)}
+.card p{margin:0;font-size:14px}
+.rows{display:grid;gap:4px;font-size:13px;margin:0}
+.rows div{display:grid;grid-template-columns:5.5em 1fr}
+.rows dt{color:var(--muted);font-weight:700}
+.rows dd{margin:0;font-weight:700}
+.minor{display:inline-block;background:var(--leaf);color:#fff;border-radius:6px;font-size:10px;font-weight:900;padding:0 5px;vertical-align:middle}
+
+/* club */
+.cover{height:150px;border-radius:24px;position:relative;overflow:hidden;background:linear-gradient(160deg,#5ec8f2 0%,#1c8fd0 58%,#0d5f9e 100%)}
+.cover svg{position:absolute;inset:0;width:100%;height:100%}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.stat{background:#fff;border-radius:18px;padding:10px 6px;text-align:center;display:grid}
+.stat small{font-size:11px;color:var(--muted);font-weight:700}
+.stat b{font-size:16px;font-weight:900;font-variant-numeric:tabular-nums}
+.stat.you b{color:var(--pink)}
+.members{display:flex;gap:12px;overflow-x:auto;padding:4px 2px 8px;scroll-snap-type:x mandatory;scrollbar-width:thin}
+.member{flex:0 0 auto;display:grid;justify-items:center;gap:4px;scroll-snap-align:start;font-size:11px;font-weight:700;width:58px;text-align:center}
+.member i{width:52px;height:52px;border-radius:50%;display:grid;place-items:center;font-style:normal;font-family:var(--display);font-size:20px;border:3px solid #fff}
+.updated{text-align:center;font-size:11px;color:var(--muted);margin:0}
+.secHead{font-weight:900;font-size:14px;margin:4px 4px -6px}
+
+.notes{background:#fff;border-radius:22px;padding:18px 20px;max-width:760px;justify-self:center;width:100%}
+.notes h2{margin:0 0 6px;font-size:16px;font-weight:900}
+.notes ul{margin:0;padding-left:1.2em;display:grid;gap:4px;font-size:14px}
+@media (prefers-reduced-motion:no-preference){.btn,.link{transition:transform .15s}.btn:hover,.link:hover{transform:translateY(-2px)}}
+</style>
+</head>
+<body>
+<main class="board">
+  <header>
+    <h1>SAIKAI AWAITS 画面イメージ</h1>
+    <p>入口・個人・クラブの3画面です。人もクラブも同じ組み立てで、カードを縦に並べています。中の名前や数字は見本です。</p>
+  </header>
+
+  <div class="screens">
+    <!-- 1. Gate -->
+    <figure>
+      <div class="phone gate">
+        <svg class="confetti" viewBox="0 0 340 700" aria-hidden="true">
+          <rect x="24" y="40" width="34" height="9" rx="4" fill="#ff4f9a" transform="rotate(-24 41 44)"/>
+          <circle cx="292" cy="70" r="10" fill="#ffcf2e"/>
+          <rect x="250" y="120" width="26" height="8" rx="4" fill="#1fb57a" transform="rotate(30 263 124)"/>
+          <path d="M60 600 l10 -20 l10 20 z" fill="#ffcf2e"/>
+          <circle cx="290" cy="620" r="14" fill="none" stroke="#ff4f9a" stroke-width="5"/>
+          <rect x="30" y="520" width="30" height="8" rx="4" fill="#0d2b4e" transform="rotate(14 45 524)"/>
+          <rect x="270" y="520" width="8" height="30" rx="4" fill="#1fb57a" transform="rotate(20 274 535)"/>
+          <circle cx="70" cy="150" r="6" fill="#0d2b4e"/>
+        </svg>
+        <div class="scroll">
+          <h2 class="logo">SAIKAI<span>AWAITS</span></h2>
+          <div class="tag"><span>ここで会おう。</span><span>ここから探そう。</span></div>
+          <form class="codeBox" onsubmit="event.preventDefault()">
+            <label for="code">招待コード</label>
+            <input id="code" placeholder="saikai-xxxx" autocomplete="off">
+            <button class="btn" type="submit">入る</button>
+          </form>
+        </div>
+      </div>
+      <figcaption>入口<small>ログイン前に見える唯一の画面</small></figcaption>
+    </figure>
+
+    <!-- 2. Person -->
+    <figure>
+      <div class="phone">
+        <svg class="confetti" viewBox="0 0 340 700" aria-hidden="true">
+          <rect x="22" y="30" width="30" height="8" rx="4" fill="#ff4f9a" transform="rotate(-30 37 34)"/>
+          <circle cx="300" cy="44" r="9" fill="#ffcf2e"/>
+          <rect x="280" y="150" width="8" height="26" rx="4" fill="#1fb57a" transform="rotate(-20 284 163)"/>
+          <circle cx="40" cy="190" r="7" fill="#0d2b4e"/>
+          <path d="M296 640 l9 -18 l9 18 z" fill="#ff4f9a"/>
+          <rect x="20" y="650" width="30" height="8" rx="4" fill="#ffcf2e" transform="rotate(18 35 654)"/>
+        </svg>
+        <div class="scroll">
+          <div class="hero">
+            <div class="avatar" aria-hidden="true">う</div>
+            <h2 class="name">うみねこ</h2>
+            <p class="sub">大島町</p>
+            <div class="chips"><span class="chip hot">元野球部</span><span class="chip hot">犬を飼っている</span><span class="chip">釣り</span><span class="chip">沖縄に住んでいた</span></div>
+          </div>
+          <div class="icons" aria-label="連絡先"><span class="icon">IG</span><span class="icon">L</span></div>
+          <a class="link" href="#">Instagram</a>
+          <a class="link" href="#">LINE<small>ID: umineko_s</small></a>
+          <div class="card">
+            <h3>よくいる場所</h3>
+            <p>大島町 ・ 大島港の東の釣りポイント</p>
+          </div>
+          <div class="card">
+            <h3>所属クラブ</h3>
+            <div class="chips" style="justify-content:flex-start"><span class="chip hot">西海フィッシングCLUB</span><span class="chip hot">大島草野球会</span></div>
+          </div>
+          <div class="card">
+            <h3>ひとこと</h3>
+            <p>週末は港にいます。キャッチボール相手募集中。</p>
+          </div>
+        </div>
+      </div>
+      <figcaption>個人のページ<small>連絡先がある人だけリンクを表示</small></figcaption>
+    </figure>
+
+    <!-- 3. Club -->
+    <figure>
+      <div class="phone">
+        <svg class="confetti" viewBox="0 0 340 700" aria-hidden="true">
+          <circle cx="306" cy="30" r="8" fill="#ff4f9a"/>
+          <rect x="16" y="230" width="8" height="26" rx="4" fill="#ffcf2e" transform="rotate(24 20 243)"/>
+          <path d="M300 470 l9 -18 l9 18 z" fill="#1fb57a"/>
+          <rect x="18" y="660" width="30" height="8" rx="4" fill="#ff4f9a" transform="rotate(-18 33 664)"/>
+        </svg>
+        <div class="scroll">
+          <div class="cover" role="img" aria-label="トップイメージ（海と波のイラスト）">
+            <svg viewBox="0 0 300 150" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+              <circle cx="232" cy="44" r="22" fill="#ffcf2e"/>
+              <path d="M0 102 q25 -14 50 0 t50 0 t50 0 t50 0 t50 0 t50 0 v48 h-300z" fill="#ffffff" opacity=".9"/>
+              <path d="M0 120 q25 -12 50 0 t50 0 t50 0 t50 0 t50 0 t50 0 v30 h-300z" fill="#ff4f9a" opacity=".85"/>
+              <path d="M70 92 l18 -34 l18 34 z" fill="#0d2b4e"/>
+            </svg>
+          </div>
+          <div class="hero">
+            <h2 class="name">西海フィッシングCLUB</h2>
+          </div>
+          <div class="stats">
+            <div class="stat"><small>メンバー</small><b>12人</b></div>
+            <div class="stat"><small>エリア</small><b>大島町</b></div>
+            <div class="stat you"><small>あなた</small><b>未参加</b></div>
+          </div>
+          <div class="card">
+            <h3>コミュニティについて</h3>
+            <dl class="rows">
+              <div><dt>活動内容</dt><dd>海釣り・さばき方教室</dd></div>
+              <div><dt>活動場所</dt><dd>大島港 東岸壁</dd></div>
+              <div><dt>頻度</dt><dd>毎週土曜の朝</dd></div>
+            </dl>
+          </div>
+          <div class="card">
+            <h3>説明</h3>
+            <p>初心者大歓迎。竿の貸し出しあり。釣った魚はその場でさばき方も教えます。</p>
+          </div>
+          <div class="card">
+            <h3>参加条件</h3>
+            <div class="chips" style="justify-content:flex-start"><span class="chip ok">無料</span><span class="chip ok">未成年OK</span><span class="chip">道具なしでOK</span></div>
+          </div>
+          <button class="btn pink" type="button">参加したい</button>
+          <p class="secHead">連絡・参加の方法</p>
+          <a class="link" href="#">LINEオープンチャット</a>
+          <a class="link" href="#">Instagram</a>
+          <div class="link" style="cursor:default">直接来てOK<small>土曜 6:00 大島港</small></div>
+          <p class="secHead">参加メンバー（12人）</p>
+          <div class="members" aria-label="参加メンバー（横にスワイプ）" tabindex="0">
+            <span class="member"><i style="background:#ffcf2e">う</i>うみねこ</span>
+            <span class="member"><i style="background:#ff9ec8">た</i>たけし</span>
+            <span class="member"><i style="background:#9fe3c6">み</i>みかん<span class="minor">未成年</span></span>
+            <span class="member"><i style="background:#a9d8ff">さ</i>さとう</span>
+            <span class="member"><i style="background:#ffd99a">ゆ</i>ゆう</span>
+            <span class="member"><i style="background:#d6c4ff">ハ</i>ハル</span>
+            <span class="member"><i style="background:#ffcf2e">ジ</i>ジロー</span>
+            <span class="member"><i style="background:#9fe3c6">ナ</i>ナオ</span>
+          </div>
+          <p class="updated">最終更新 2026/11/04</p>
+        </div>
+      </div>
+      <figcaption>クラブのページ<small>メンバーは横にスワイプ</small></figcaption>
+    </figure>
+  </div>
+
+  <section class="notes">
+    <h2>仕様書（docs/SPEC.md）に合わせて足したもの</h2>
+    <ul>
+      <li>個人のページ：属性タグ、よくいる場所（出没スポット）、所属クラブ、ひとこと（4-2の項目）</li>
+      <li>未成年の人のページには、連絡先リンクとよくいる場所を出しません（5章）</li>
+      <li>クラブのページ：活動場所と頻度は「コミュニティについて」に、有料・無料と未成年OKは「参加条件」に入れ、最終更新日を下に出します（4-1）</li>
+      <li>未成年のメンバーには「未成年」マークを付けます</li>
+    </ul>
+  </section>
+</main>
+</body>
+</html>
