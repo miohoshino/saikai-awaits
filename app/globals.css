@@ -212,3 +212,7 @@ body{background:#edf2f5}
 .newsCard.withImage h3,.newsCard.withImage p{display:-webkit-box;-webkit-box-orient:vertical;overflow:hidden}
 .newsCard.withImage h3{-webkit-line-clamp:3}
 .newsCard.withImage p{-webkit-line-clamp:2}
+
+/* Minor mark (SPEC 5) */
+.minorBadge{display:inline-block;vertical-align:middle;margin-left:6px;padding:2px 7px;border-radius:999px;background:#ffcf2e;color:#0d2b4e;font-size:10px;font-weight:900;letter-spacing:0;line-height:1.5;white-space:nowrap}
+.personDetailHero h1 .minorBadge{font-size:12px;padding:3px 9px}

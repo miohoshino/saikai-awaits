@@ -44,7 +44,8 @@ function toPerson(x){
     bio:x.bio||"",
     tags:allTags.slice(0,6),
     rawTags:allTags,
-    avatar:x.avatar_url||""
+    avatar:x.avatar_url||"",
+    minor:!!x.is_minor
   };
 }
 
@@ -52,6 +53,10 @@ function personCategories(person){
   const tags=person.rawTags.map(normTag);
   const hit=PEOPLE_CATEGORIES.filter(c=>tags.includes(normTag(c)));
   return hit.length?hit:["その他"];
+}
+
+function MinorBadge(){
+  return <span className="minorBadge">未成年</span>;
 }
 
 function Avatar({person,size=54}){
@@ -107,7 +112,7 @@ export default function Page(){
   }
 
   async function loadDirectory(){
-    const {data}=await supabase.from("members").select("id,name,area,organization,bio,tags,skills,avatar_url").eq("visible",true).neq("name","").order("updated_at",{ascending:false});
+    const {data}=await supabase.from("members").select("id,name,area,organization,bio,tags,skills,avatar_url,is_minor").eq("visible",true).neq("name","").order("updated_at",{ascending:false});
     setDirectory(data||[]);
   }
 
@@ -328,7 +333,7 @@ function Home({ctx,profile,others}){
         {person&&<article className="recommendCard clickable" onClick={()=>openDetail({kind:"person",item:person})}>
           <div className="personTop"><Avatar person={person} size={56}/><span className="addPerson" aria-hidden="true">♙+</span></div>
           <div className="greenKicker">♣ 気の合いそうな人</div>
-          <h3>{person.name}<small>さん</small></h3>
+          <h3>{person.name}<small>さん</small>{person.minor&&<MinorBadge/>}</h3>
           <div className="tags">{person.tags.slice(0,3).map(t=><span key={t}>{t}</span>)}</div>
           <p>{person.bio}</p>
         </article>}
@@ -373,7 +378,7 @@ function People({ctx,others}){
 function PersonRow({person:p,openDetail}){
   return <article className="personRow clickable" onClick={()=>openDetail({kind:"person",item:p})}>
     <Avatar person={p}/>
-    <div><h3>{p.name}</h3><small>{p.area} · {p.role}</small><p>{p.bio}</p><div className="tags">{p.tags.map(t=><span key={t}>{t}</span>)}</div></div>
+    <div><h3>{p.name}{p.minor&&<MinorBadge/>}</h3><small>{p.area} · {p.role}</small><p>{p.bio}</p><div className="tags">{p.tags.map(t=><span key={t}>{t}</span>)}</div></div>
   </article>;
 }
 
@@ -415,7 +420,7 @@ function Me({ctx,logout,openAdmin,profile,saveProfile,message}){
         </div>
       : <div className="profileCard">
           <Avatar person={person} size={76}/>
-          <h3>{profile?.name||"メンバー"}</h3>
+          <h3>{profile?.name||"メンバー"}{profile?.is_minor&&<MinorBadge/>}</h3>
           <p>{profile?.area||"西海市"}{profile?.organization?" · "+profile.organization:""}</p>
           {profile?.bio&&<p className="profileBio">{profile.bio}</p>}
           <div className="tags profileTags">{uniqueTags([...(profile?.tags||[]),...(profile?.skills||[])]).slice(0,8).map(t=><span key={t}>{t}</span>)}</div>
@@ -472,7 +477,7 @@ function DetailView({detail,onBack,ctx}){
       <DetailHeader onBack={onBack}/>
       <section className="personDetailHero">
         <Avatar person={item} size={110}/>
-        <h1>{item.name}</h1>
+        <h1>{item.name}{item.minor&&<MinorBadge/>}</h1>
         <p>{item.area} · {item.role}</p>
         <div className="tags detailTags">{(item.tags||[]).map(t=><span key={t}>{t}</span>)}</div>
       </section>

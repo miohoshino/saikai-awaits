@@ -13,7 +13,7 @@ const DETAIL_FIELDS={
 };
 const ADMIN_ENTRY_COLUMNS="id,kind,status,origin,title,summary,body,area,tags,details,image_url,source_name,source_url,community_id,review_note,published_at,created_at,submitter:members!entries_submitted_by_fkey(name)";
 
-const TABS=[["pending","確認待ち"],["published","公開中"],["closed","見送り・終了"],["invites","招待コード"]];
+const TABS=[["pending","確認待ち"],["published","公開中"],["closed","見送り・終了"],["invites","招待コード"],["members","会員"]];
 
 export default function Admin({onBack,onChanged}){
   const [tab,setTab]=useState("pending");
@@ -41,6 +41,8 @@ export default function Admin({onBack,onChanged}){
     <section className="adminBody">
       {tab==="invites"
         ? <InviteManager/>
+        : tab==="members"
+        ? <MemberManager onChanged={onChanged}/>
         : <EntryList key={tab} statuses={tab==="closed"?["rejected","archived"]:[tab]} allowCreate={tab==="published"} onChanged={changed}/>}
     </section>
   </div>;
@@ -224,6 +226,41 @@ function InviteManager(){
         <button className="secondaryCta" onClick={()=>toggleRevoked(inv)}>{inv.revoked?"有効化":"無効化"}</button>
       </article>;
     })}</div>
+  </>;
+}
+
+function MemberManager({onChanged}){
+  const [members,setMembers]=useState([]);
+  const [error,setError]=useState("");
+  const [busyId,setBusyId]=useState(null);
+
+  async function load(){
+    const {data,error}=await supabase.from("members").select("id,name,area,role,is_minor,created_at").order("created_at",{ascending:false});
+    if(error){setError("会員を読み込めませんでした。");return;}
+    setMembers(data||[]);
+  }
+  useEffect(()=>{load();},[]);
+
+  async function toggleMinor(m){
+    const label=m.name||"名前未設定の会員";
+    const msg=m.is_minor?`「${label}」の未成年マークを外しますか？`:`「${label}」に未成年マークを付けますか？`;
+    if(!window.confirm(msg)) return;
+    setBusyId(m.id);
+    const {error}=await supabase.rpc("set_member_minor",{p_member:m.id,p_is_minor:!m.is_minor});
+    setBusyId(null);
+    if(error){setError("更新できませんでした。");return;}
+    setError(""); await load(); await onChanged?.();
+  }
+
+  return <>
+    {error&&<div className="inlineMessage">{error}</div>}
+    <div className="adminList">{members.map(m=><article key={m.id} className="inviteRow">
+      <div>
+        <b>{m.name||"名前未設定"}{m.is_minor&&<span className="minorBadge">未成年</span>}</b>
+        <small>{m.role==="admin"?"管理者 · ":""}{m.area||"地区未設定"} · {formatDateTime(m.created_at)}登録</small>
+      </div>
+      <button className="secondaryCta" disabled={busyId===m.id} onClick={()=>toggleMinor(m)}>{m.is_minor?"マークを外す":"未成年にする"}</button>
+    </article>)}</div>
   </>;
 }
 
