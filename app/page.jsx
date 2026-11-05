@@ -297,54 +297,83 @@ function Chips({options,value,onChange,label}){
   </div>;
 }
 
-function SectionHead({title,onMore}){
-  return <div className="sectionHead"><div><h2>{title}</h2><span></span></div>{onMore&&<button onClick={onMore}>すべて見る 〉</button>}</div>;
-}
-
 // ---------------------------------------------------------------------------
 // Home
 // ---------------------------------------------------------------------------
 
 function Home({ctx,profile,others}){
-  const {clubs,membersOf,isMemberOf,openDetail,go}=ctx;
+  const {clubs,clubMembers,membersOf,isMemberOf,openDetail,go,userId}=ctx;
   const myTags=[...(profile?.tags||[]),...(profile?.skills||[])].map(normTag);
   const shared=p=>p.rawTags.filter(t=>myTags.includes(normTag(t))).length;
   const person=[...others].sort((a,b)=>shared(b)-shared(a))[0];
-  const club=clubs.find(c=>!isMemberOf(c.id))||clubs[0];
+  const myDistrict=profile?.area||"";
 
-  return <div className="home">
-    <header className="masthead" style={{backgroundImage:`linear-gradient(180deg,rgba(234,249,255,.85) 0%,rgba(240,252,255,.25) 35%,rgba(255,255,255,.1) 62%,#fff 100%),url("${TOP_IMAGES.home}")`}}>
-      <div className="mastheadTop"><Logo/><div className="headActions">
-        <button className="headAvatar" onClick={()=>go("me")} aria-label="マイページ"><Avatar person={{name:profile?.name}} size={42}/></button>
-      </div></div>
-      <div className="greeting">
-        <div><h1>こんにちは、{profile?.name||"メンバー"}さん <span>☀</span></h1><p>今日も、すてきな西海の一日を</p></div>
-      </div>
-    </header>
+  const nearby=myDistrict?clubs.filter(c=>c.district===myDistrict):[];
+  // Recommended: clubs I am not in, with more like-minded members first, then bigger clubs.
+  const likeMinded=c=>membersOf(c.id).filter(m=>m.member_id!==userId&&shared(m.person)>0).length;
+  const recommended=clubs.filter(c=>!isMemberOf(c.id))
+    .map(c=>({c,score:likeMinded(c),size:membersOf(c.id).length}))
+    .sort((a,b)=>b.score-a.score||b.size-a.size)
+    .slice(0,6).map(x=>x.c);
+  const mine=clubMembers.filter(m=>m.member_id===userId).map(m=>clubs.find(c=>c.id===m.club_id)).filter(Boolean);
+  const newClub=()=>openDetail({kind:"clubForm",item:null});
 
-    <section className="content">
-      <SectionHead title="あなたへのおすすめ" onMore={()=>go("community")}/>
+  return <div className="popPage popScreen">
+    <Confetti/>
+    <div className="popStack">
+      <header className="popHello">
+        <span className="popLogoSmall">SAIKAI<b>AWAITS</b></span>
+        <h1>こんにちは、{profile?.name||"メンバー"}さん</h1>
+      </header>
 
-      <div className="recommendGrid" style={{gridTemplateColumns:`repeat(${[person,club].filter(Boolean).length||1},1fr)`}}>
-        {person&&<article className="recommendCard clickable" onClick={()=>openDetail({kind:"person",item:person})}>
-          <div className="personTop"><Avatar person={person} size={56}/><span className="addPerson" aria-hidden="true">♙+</span></div>
-          <div className="greenKicker">♣ 気の合いそうな人</div>
-          <h3>{person.name}<small>さん</small>{person.minor&&<MinorBadge/>}</h3>
-          <div className="tags">{person.tags.slice(0,3).map(t=><span key={t}>{t}</span>)}</div>
-          <p>{person.bio}</p>
-        </article>}
+      <h2 className="popSecHead">近くのクラブ{myDistrict&&<small>{myDistrict}</small>}</h2>
+      {nearby.length
+        ? <div className="popSwipe" tabIndex={0} aria-label="近くのクラブ（横にスワイプ）">{nearby.map(c=><ClubCard key={c.id} club={c} ctx={ctx} compact/>)}</div>
+        : <div className="popCard popEmptyCard">
+            <p>{myDistrict?"この地区のクラブは、まだありません。つくってみませんか？":"プロフィールで地区を選ぶと、近くのクラブが出ます。"}</p>
+            {myDistrict&&<button className="popSmallBtn" onClick={newClub}>＋ クラブをつくる</button>}
+          </div>}
 
-        {club&&<article className="recommendCard clickable" onClick={()=>openDetail({kind:"club",item:club})}>
-          <ClubCover club={club} className="cardCover"/>
-          <div className="greenKicker">▣ おすすめのクラブ</div>
-          <h3>{club.name}</h3>
-          <div className="miniMeta">♟ メンバー {membersOf(club.id).length}人</div>
-          <p>{club.activity}</p>
-          <button className="softBlue">{isMemberOf(club.id)?"参加中 ✓":"見てみる"}</button>
-        </article>}
-      </div>
-    </section>
+      <h2 className="popSecHead">おすすめのクラブ</h2>
+      {recommended.length
+        ? <div className="popSwipe" tabIndex={0} aria-label="おすすめのクラブ（横にスワイプ）">{recommended.map(c=><ClubCard key={c.id} club={c} ctx={ctx} compact/>)}</div>
+        : <p className="popEmpty">いまおすすめできるクラブはありません。</p>}
+      <button className="popLinkBtn" onClick={()=>go("community")}>クラブをすべて見る 〉</button>
+
+      {person&&<>
+        <h2 className="popSecHead">気の合いそうな人</h2>
+        <button className="popPerson" onClick={()=>openDetail({kind:"person",item:person})}>
+          <Avatar person={person} size={56}/>
+          <span>
+            <b>{person.name}{person.minor&&<MinorBadge/>}</b>
+            <small>{person.area}</small>
+            <span className="popMiniChips">{person.tags.slice(0,3).map(t=><i key={t}>{t}</i>)}</span>
+          </span>
+        </button>
+      </>}
+
+      {mine.length>0&&<>
+        <h2 className="popSecHead">所属中のクラブ</h2>
+        <div className="popMiniChips popMine">{mine.map(c=><button key={c.id} onClick={()=>openDetail({kind:"club",item:c})}>{c.name}</button>)}</div>
+      </>}
+    </div>
   </div>;
+}
+
+function ClubCard({club,ctx,compact}){
+  const {membersOf,isMemberOf,openDetail}=ctx;
+  return <button className={"popClubCard"+(compact?" compact":"")} onClick={()=>openDetail({kind:"club",item:club})}>
+    <ClubCover club={club} className="popClubCover"/>
+    <span className="popClubBody">
+      <b>{club.name}</b>
+      <small>{club.district||"地区未設定"} · {membersOf(club.id).length}人{isMemberOf(club.id)?" · 所属中":""}</small>
+      {!compact&&club.activity&&<span className="popClubText">{club.activity}</span>}
+      <span className="popMiniChips">
+        <i className={club.is_paid?"hot":"ok"}>{club.is_paid?"有料":"無料"}</i>
+        {club.minors_ok&&<i className="ok">未成年OK</i>}
+      </span>
+    </span>
+  </button>;
 }
 
 // ---------------------------------------------------------------------------
@@ -383,20 +412,48 @@ function PersonRow({person:p,openDetail}){
 // ---------------------------------------------------------------------------
 
 function Community({ctx}){
-  const {clubs,membersOf,openDetail}=ctx;
+  const {clubs,openDetail}=ctx;
+  const [q,setQ]=useState("");
+  const [district,setDistrict]=useState("all");
+  const [fee,setFee]=useState("all");
+  const [minorsOnly,setMinorsOnly]=useState(false);
 
-  return <PageShell hero={{image:TOP_IMAGES.community,kicker:"CLUB",title:"クラブ",lead:"好きなことから、つながる。"}}>
-    <button className="createClubBtn" onClick={()=>openDetail({kind:"clubForm",item:null})}>＋ クラブをつくる</button>
-    {!clubs.length?<p className="emptyNote">まだ登録がありません。</p>:
-    <div className="communityCards">{clubs.map(x=><article className="clickable" key={x.id} onClick={()=>openDetail({kind:"club",item:x})}>
-      <ClubCover club={x} className="commCover"/>
-      <div>
-        <h3>{x.name}</h3>
-        <p>{x.activity}</p>
-        <small>♟ メンバー {membersOf(x.id).length}人 · {x.district||"地区未設定"}</small>
+  const words=q.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const matched=clubs.filter(c=>{
+    if(district!=="all"&&c.district!==district) return false;
+    if(fee==="free"&&c.is_paid) return false;
+    if(fee==="paid"&&!c.is_paid) return false;
+    if(minorsOnly&&!c.minors_ok) return false;
+    const text=[c.name,c.activity,c.description,c.venue,c.frequency].join(" ").toLowerCase();
+    return words.every(w=>text.includes(w));
+  });
+  const filtered=q||district!=="all"||fee!=="all"||minorsOnly;
+
+  return <div className="popPage popScreen">
+    <Confetti/>
+    <div className="popStack">
+      <h1 className="popName">クラブ</h1>
+      <button className="popBtn" onClick={()=>openDetail({kind:"clubForm",item:null})}>＋ クラブをつくる</button>
+      <input className="popSearch" value={q} onChange={e=>setQ(e.target.value)} placeholder="名前・活動内容・場所で探す" aria-label="クラブを検索"/>
+      <div className="popFilters">
+        <PopChoice label="地区" value={district} onChange={setDistrict} options={[["all","すべて"],...DISTRICTS.map(d=>[d,d==="市外・西海に関わる"?"市外":d])]}/>
+        <PopChoice label="料金" value={fee} onChange={setFee} options={[["all","すべて"],["free","無料"],["paid","有料"]]}/>
+        <div className="popChoice" role="group" aria-label="未成年">
+          <button aria-pressed={minorsOnly} className={minorsOnly?"on":""} onClick={()=>setMinorsOnly(v=>!v)}>未成年OKだけ</button>
+        </div>
       </div>
-    </article>)}</div>}
-  </PageShell>;
+      {filtered&&<p className="popCount">{matched.length}件 <button onClick={()=>{setQ("");setDistrict("all");setFee("all");setMinorsOnly(false);}}>条件をクリア</button></p>}
+      {!clubs.length?<p className="popEmpty">まだ登録がありません。</p>:
+       !matched.length?<p className="popEmpty">条件に合うクラブは見つかりませんでした。</p>:
+       <div className="popList">{matched.map(c=><ClubCard key={c.id} club={c} ctx={ctx}/>)}</div>}
+    </div>
+  </div>;
+}
+
+function PopChoice({label,value,onChange,options}){
+  return <div className="popChoice" role="radiogroup" aria-label={label}>
+    {options.map(([id,text])=><button key={id} role="radio" aria-checked={value===id} className={value===id?"on":""} onClick={()=>onChange(id)}>{text}</button>)}
+  </div>;
 }
 
 // ---------------------------------------------------------------------------
