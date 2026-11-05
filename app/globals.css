@@ -364,3 +364,4 @@ body{background:#edf2f5}
 .popField .popWarn{font-weight:700}
 .popForm .tagPicker input{border:2px solid #d8e7f0;border-radius:12px}
 .popCommon{color:var(--pink)!important;font-weight:900!important;line-height:1.5}
+.popSecRow{display:flex;justify-content:space-between;align-items:baseline;gap:8px}.popSecRow .popLinkBtn{margin:0}

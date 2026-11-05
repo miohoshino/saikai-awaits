@@ -197,7 +197,7 @@ export default function Page(){
     await loadClubs(); return "";
   }
 
-  const ctx={clubs,clubMembers,membersOf,isMemberOf,canEditClub,joinClub,leaveClub,userId,profile,reloadClubs:loadClubs,openDetail:setDetail,go};
+  const ctx={others,clubs,clubMembers,membersOf,isMemberOf,canEditClub,joinClub,leaveClub,userId,profile,reloadClubs:loadClubs,openDetail:setDetail,go};
 
   if(!supabaseConfigured){
     return <main className="gate">
@@ -301,7 +301,7 @@ function Home({ctx,profile,others}){
         <h1>こんにちは、{profile?.name||"メンバー"}さん</h1>
       </header>
 
-      <h2 className="popSecHead">近くのクラブ{myDistrict&&<small>{myDistrict}</small>}</h2>
+      <div className="popSecRow"><h2 className="popSecHead">近くのクラブ{myDistrict&&<small>{myDistrict}</small>}</h2><button className="popLinkBtn" onClick={()=>openDetail({kind:"nearby",item:null})}>場所から探す 〉</button></div>
       {nearby.length
         ? <div className="popSwipe" tabIndex={0} aria-label="近くのクラブ（横にスワイプ）">{nearby.map(c=><ClubCard key={c.id} club={c} ctx={ctx} compact/>)}</div>
         : <div className="popCard popEmptyCard">
@@ -481,6 +481,50 @@ function People({ctx,others}){
       {!others.length?<p className="popEmpty">まだ他のメンバーがいません。招待した人が参加すると、ここに表示されます。</p>:
        !shown.length?<p className="popEmpty">条件に合うメンバーが見つかりませんでした。</p>:
        <div className="popList">{shown.map(p=><PersonButton key={p.id} person={p} openDetail={openDetail}/>)}</div>}
+    </div>
+  </div>;
+}
+
+// "近い場所" (SPEC 4-3): clubs by district / venue, people by district / spots.
+function Nearby({ctx,onBack}){
+  const {clubs,others,profile,openDetail}=ctx;
+  const [district,setDistrict]=useState(DISTRICTS.includes(profile?.area)?profile.area:DISTRICTS[0]);
+  const [q,setQ]=useState("");
+  const word=q.trim().toLowerCase();
+  // SPEC 5 / client decision: adults do not see minors in "近い場所".
+  const pool=profile?.is_minor?others:others.filter(p=>!p.minor);
+
+  const clubHits=clubs.filter(c=>word?(c.venue||"").toLowerCase().includes(word):c.district===district);
+  const peopleHits=pool.map(p=>{
+    if(word){
+      const places=p.spotPlaces.filter(x=>x.toLowerCase().includes(word));
+      return places.length?{p,why:`よくいる：${places.join("・")}`}:null;
+    }
+    const lives=p.area===district;
+    const often=p.spotDistricts.includes(district);
+    if(!lives&&!often) return null;
+    const places=p.spotPlaces.length?`（${p.spotPlaces.join("・")}）`:"";
+    return {p,why:[lives&&"住んでいる",often&&`よくいる${places}`].filter(Boolean).join(" · ")};
+  }).filter(Boolean);
+  const label=word?`「${q.trim()}」`:district==="市外・西海に関わる"?"近隣市町":district;
+
+  return <div className="popPage popScreen">
+    <Confetti/>
+    <header className="popTopBar"><button onClick={onBack} aria-label="戻る">‹</button></header>
+    <div className="popStack">
+      <h1 className="popName">近い場所</h1>
+      <PopChoice label="地区" value={word?"":district} onChange={d=>{setDistrict(d);setQ("");}} options={DISTRICTS.map(d=>[d,d==="市外・西海に関わる"?"近隣市町":d])}/>
+      <input className="popSearch" value={q} onChange={e=>setQ(e.target.value)} placeholder="キーワードで探す（例：大島港）" aria-label="キーワードで探す"/>
+
+      <h2 className="popSecHead">{label}のクラブ<small>{clubHits.length}件</small></h2>
+      {clubHits.length
+        ? <div className="popList">{clubHits.map(c=><ClubCard key={c.id} club={c} ctx={ctx}/>)}</div>
+        : <p className="popEmpty">見つかりませんでした。</p>}
+
+      <h2 className="popSecHead">{label}の人<small>{peopleHits.length}人</small></h2>
+      {peopleHits.length
+        ? <div className="popList">{peopleHits.map(({p,why})=><PersonButton key={p.id} person={p} openDetail={openDetail} note={why}/>)}</div>
+        : <p className="popEmpty">見つかりませんでした。</p>}
     </div>
   </div>;
 }
@@ -706,6 +750,7 @@ function DetailView({detail,onBack,ctx}){
   const {kind,item}=detail;
 
   if(kind==="person") return <PersonPage person={item} ctx={ctx} onBack={onBack}/>;
+  if(kind==="nearby") return <Nearby ctx={ctx} onBack={onBack}/>;
 
   if(kind==="clubForm") return <ClubForm club={item} onBack={item?()=>ctx.openDetail({kind:"club",item}):onBack} ctx={ctx}/>;
   return <ClubPage club={ctx.clubs.find(c=>c.id===item.id)||item} onBack={onBack} ctx={ctx}/>;
