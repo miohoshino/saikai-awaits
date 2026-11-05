@@ -11,13 +11,6 @@ const navItems=[
   ["me","マイページ","○"]
 ];
 
-const TOP_IMAGES={
-  home:"/images/top-home.jpg",
-  people:"/images/top-people.jpg",
-  community:"/images/top-community.jpg",
-  me:"/images/top-me.jpg"
-};
-
 const PEOPLE_CATEGORIES=["AI","釣り","音楽","芸術","地域のお店"];
 const CLUB_IMAGE_BUCKET="club-images";
 const CLUB_COLUMNS="id,name,activity,description,district,venue,frequency,contacts,is_paid,minors_ok,image_url,updated_at,created_at";
@@ -42,7 +35,10 @@ function toPerson(x){
     tags:allTags.slice(0,6),
     rawTags:allTags,
     avatar:x.avatar_url||"",
-    minor:!!x.is_minor
+    minor:!!x.is_minor,
+    spotDistricts:x.spot_districts||[],
+    spotPlaces:x.spot_places||[],
+    contacts:Array.isArray(x.contacts)?x.contacts:[]
   };
 }
 
@@ -127,7 +123,7 @@ export default function Page(){
   }
 
   async function loadDirectory(){
-    const {data}=await supabase.from("members").select("id,name,area,bio,tags,avatar_url,is_minor").eq("visible",true).neq("name","").order("updated_at",{ascending:false});
+    const {data}=await supabase.from("members").select("id,name,area,bio,tags,avatar_url,is_minor,spot_districts,spot_places,contacts").eq("visible",true).neq("name","").order("updated_at",{ascending:false});
     setDirectory(data||[]);
   }
 
@@ -136,9 +132,12 @@ export default function Page(){
       name:payload.name.trim(),
       area:payload.area,
       bio:payload.bio||"",
-      tags:uniqueTags(payload.tags||[]).slice(0,MAX_TAGS)
+      tags:uniqueTags(payload.tags||[]).slice(0,MAX_TAGS),
+      spot_districts:payload.spot_districts||[],
+      spot_places:payload.spot_places||[],
+      contacts:payload.contacts||[]
     }).eq("id",userId).select().single();
-    if(error){setMessage("プロフィールを保存できませんでした。");return false;}
+    if(error){setMessage(error.message?.includes("invalid_contacts")?"連絡先の入れ方を確かめてください。":error.message?.includes("invalid_places")?"場所は60文字までにしてください。":"プロフィールを保存できませんでした。");return false;}
     setProfile(data); await Promise.all([loadDirectory(),loadTags()]); setMessage(""); return true;
   }
 
@@ -227,12 +226,14 @@ export default function Page(){
 
   if(profile && !profile.name){
     return <main className="appStage"><section className="app">
-      <div className="onboarding"><header><Logo/></header><section>
-        <div className="pageKicker">WELCOME TO SAIKAI</div>
-        <h1>あなたのことを、少しだけ。</h1>
-        <p>西海で「誰とつながれるか」が分かるプロフィールをつくります。</p>
-        <ProfileForm saveProfile={saveProfile} minor={!!profile?.is_minor} tagOptions={tagOptions} submitLabel="SAIKAI AWAITS をはじめる"/>
-      </section></div>
+      <div className="popPage popScreen">
+        <Confetti/>
+        <div className="popStack">
+          <h1 className="popName">あなたのことを、少しだけ。</h1>
+          <ProfileForm saveProfile={saveProfile} minor={!!profile?.is_minor} tagOptions={tagOptions} submitLabel="SAIKAI AWAITS をはじめる"/>
+          {message&&<p className="popWarn" role="alert">{message}</p>}
+        </div>
+      </div>
     </section></main>;
   }
 
@@ -255,18 +256,6 @@ export default function Page(){
   </main>;
 }
 
-function Logo(){
-  return <div className="logoWrap">
-    <div className="logoMark" aria-hidden="true">
-      <i className="hill h1"></i><i className="hill h2"></i><i className="sun"></i><i className="wave w1"></i><i className="wave w2"></i>
-    </div>
-    <div>
-      <div className="logoText">SAIKAI AWAITS</div>
-      <div className="logoTag">つながる、見つかる、好きになる。西海のくらしのネットワーク</div>
-    </div>
-  </div>;
-}
-
 // Pop confetti backdrop (new design, docs/mockups/redesign-v1.html).
 function Confetti(){
   return <svg className="confetti" viewBox="0 0 400 800" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
@@ -281,29 +270,6 @@ function Confetti(){
     <path d="M330 330 l10 -20 l10 20 z" fill="#ff4f9a"/>
     <rect x="20" y="420" width="10" height="30" rx="5" fill="#ffcf2e" transform="rotate(-18 25 435)"/>
   </svg>;
-}
-
-function PageHero({image,kicker,title,lead}){
-  return <header className="pageHero" style={{backgroundImage:`linear-gradient(180deg,rgba(255,255,255,.88) 0%,rgba(255,255,255,0) 32%,rgba(6,40,66,.05) 55%,rgba(6,40,66,.72) 100%),url("${image}")`}}>
-    <Logo/>
-    <div className="pageHeroText">
-      <div className="pageKicker">{kicker}</div>
-      <h1>{title}</h1>
-      {lead&&<p>{lead}</p>}
-    </div>
-  </header>;
-}
-
-function PageShell({hero,children}){
-  return <div className="page"><PageHero {...hero}/><section>{children}</section></div>;
-}
-
-function Chips({options,value,onChange,label}){
-  return <div className="chipRow" role="tablist" aria-label={label}>
-    {options.map(([id,text,count])=><button key={id} role="tab" aria-selected={value===id} className={value===id?"active":""} onClick={()=>onChange(id)}>
-      {text}{count!=null&&<i>{count}</i>}
-    </button>)}
-  </div>;
 }
 
 // ---------------------------------------------------------------------------
@@ -385,6 +351,73 @@ function ClubCard({club,ctx,compact}){
   </button>;
 }
 
+const CONTACT_TYPES=[["line","LINE"],["instagram","Instagram"],["x","X"],["facebook","Facebook"],["email","メール"],["url","その他のリンク"]];
+const CONTACT_LABELS=Object.fromEntries(CONTACT_TYPES);
+const CONTACT_PLACEHOLDERS={line:"LINE ID",instagram:"@ユーザー名",x:"@ユーザー名",facebook:"ユーザー名 または https://…",email:"name@example.com",url:"https://…"};
+const MAX_PLACES=3;
+const MAX_CONTACTS=5;
+
+// Turns a contact into a safe link; LINE IDs stay plain text.
+function personContactHref({type,value=""}){
+  const v=value.trim();
+  const id=v.replace(/^@/,"");
+  const safeId=/^[A-Za-z0-9._-]{1,60}$/.test(id);
+  if(type==="instagram") return /^https:\/\/(www\.)?instagram\.com\//i.test(v)?v:safeId?`https://www.instagram.com/${id}/`:"";
+  if(type==="x") return /^https:\/\/(www\.)?(x|twitter)\.com\//i.test(v)?v:safeId?`https://x.com/${id}`:"";
+  if(type==="facebook") return /^https:\/\/(www\.)?facebook\.com\//i.test(v)?v:safeId?`https://www.facebook.com/${id}`:"";
+  if(type==="email") return /^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/.test(v)?`mailto:${v}`:"";
+  if(type==="url") return /^https?:\/\//i.test(v)?v:"";
+  return "";
+}
+
+function PopAvatar({person,size=96}){
+  if(person?.avatar) return <img className="popAvatar" src={person.avatar} alt="" style={{width:size,height:size}}/>;
+  return <span className="popAvatar" aria-hidden="true" style={{width:size,height:size,fontSize:size*.42,background:AVATAR_COLORS[hashOf(person?.id||person?.name||"")%AVATAR_COLORS.length]}}>{(person?.name||"?").slice(0,1)}</span>;
+}
+
+// Personal page (new design). Used for other people and for "My page".
+function PersonPage({person,ctx,onBack,top,bottom}){
+  const {clubs,clubMembers,openDetail}=ctx;
+  const myClubs=clubMembers.filter(m=>m.member_id===person.id).map(m=>clubs.find(c=>c.id===m.club_id)).filter(Boolean);
+  const showPrivate=!person.minor; // SPEC 5: minors have no spots or contacts
+  const contacts=showPrivate?person.contacts:[];
+  const spots=showPrivate?[...person.spotDistricts,...person.spotPlaces]:[];
+
+  return <div className="popPage popScreen">
+    <Confetti/>
+    {onBack&&<header className="popTopBar"><button onClick={onBack} aria-label="戻る">‹</button></header>}
+    <div className="popStack">
+      {top}
+      <div className="popHero">
+        <PopAvatar person={person}/>
+        <h1 className="popName">{person.name}{person.minor&&<MinorBadge/>}</h1>
+        <p className="popSub">{person.area||"地区未設定"}</p>
+        {person.rawTags.length>0&&<div className="popTagChips">{person.rawTags.map(t=><span key={t}>{t}</span>)}</div>}
+      </div>
+
+      {contacts.map((c,i)=>{
+        const href=personContactHref(c);
+        const label=CONTACT_LABELS[c.type]||"連絡先";
+        return href
+          ? <a key={i} className="popLink" href={href} target="_blank" rel="noopener noreferrer">{label}<small>{c.value}</small></a>
+          : <div key={i} className="popLink static">{label}<small>{c.type==="line"?`ID: ${c.value}`:c.value}</small></div>;
+      })}
+
+      {spots.length>0&&<section className="popCard"><h2>よくいる場所</h2><p>{spots.join(" ・ ")}</p></section>}
+
+      <section className="popCard">
+        <h2>所属クラブ</h2>
+        {myClubs.length
+          ? <div className="popMiniChips popMine">{myClubs.map(c=><button key={c.id} onClick={()=>openDetail({kind:"club",item:c})}>{c.name}</button>)}</div>
+          : <p className="popMuted">まだ所属しているクラブはありません。</p>}
+      </section>
+
+      {person.bio&&<section className="popCard"><h2>ひとこと</h2><p>{person.bio}</p></section>}
+      {bottom}
+    </div>
+  </div>;
+}
+
 // ---------------------------------------------------------------------------
 // People
 // ---------------------------------------------------------------------------
@@ -393,27 +426,28 @@ function People({ctx,others}){
   const {openDetail}=ctx;
   const [q,setQ]=useState("");
   const [category,setCategory]=useState("all");
-  const matched=others.filter(x=>[x.name,x.area,x.bio,...x.rawTags].join(" ").toLowerCase().includes(q.toLowerCase()));
-  const groups=[...PEOPLE_CATEGORIES,"その他"].map(c=>[c,matched.filter(p=>personCategories(p).includes(c))]);
-  const visible=category==="all"?groups.filter(([,list])=>list.length):groups.filter(([c])=>c===category);
+  const matched=others.filter(x=>[x.name,x.area,x.bio,...x.rawTags].join(" ").toLowerCase().includes(q.trim().toLowerCase()));
+  const counts=Object.fromEntries([...PEOPLE_CATEGORIES,"その他"].map(c=>[c,matched.filter(p=>personCategories(p).includes(c)).length]));
+  const shown=category==="all"?matched:matched.filter(p=>personCategories(p).includes(category));
 
-  return <PageShell hero={{image:TOP_IMAGES.people,kicker:"PEOPLE",title:"つながる",lead:"西海の人を、好きなことや得意なことから見つける。"}}>
-    <input className="searchInput" value={q} onChange={e=>setQ(e.target.value)} placeholder="人・得意なこと・興味で検索" aria-label="メンバーを検索"/>
-    <Chips label="カテゴリー" value={category} onChange={setCategory} options={[["all","すべて"],...groups.map(([c,list])=>[c,c,list.length])]}/>
-    {!others.length?<p className="emptyNote">まだ他のメンバーがいません。招待した人が参加すると、ここに表示されます。</p>:
-    visible.every(([,list])=>!list.length)?<p className="emptyNote">条件に合うメンバーが見つかりませんでした。</p>:
-    visible.map(([c,list])=><section className="peopleGroup" key={c}>
-      {category==="all"&&<h2>{c}<small>{list.length}人</small></h2>}
-      <div className="listCards">{list.map(p=><PersonRow key={p.id} person={p} openDetail={openDetail}/>)}</div>
-    </section>)}
-  </PageShell>;
-}
-
-function PersonRow({person:p,openDetail}){
-  return <article className="personRow clickable" onClick={()=>openDetail({kind:"person",item:p})}>
-    <Avatar person={p}/>
-    <div><h3>{p.name}{p.minor&&<MinorBadge/>}</h3><small>{p.area}</small><p>{p.bio}</p><div className="tags">{p.tags.map(t=><span key={t}>{t}</span>)}</div></div>
-  </article>;
+  return <div className="popPage popScreen">
+    <Confetti/>
+    <div className="popStack">
+      <h1 className="popName">つながる</h1>
+      <input className="popSearch" value={q} onChange={e=>setQ(e.target.value)} placeholder="名前・地区・タグで探す" aria-label="メンバーを検索"/>
+      <PopChoice label="カテゴリー" value={category} onChange={setCategory} options={[["all","すべて"],...[...PEOPLE_CATEGORIES,"その他"].filter(c=>counts[c]).map(c=>[c,`${c} ${counts[c]}`])]}/>
+      {!others.length?<p className="popEmpty">まだ他のメンバーがいません。招待した人が参加すると、ここに表示されます。</p>:
+       !shown.length?<p className="popEmpty">条件に合うメンバーが見つかりませんでした。</p>:
+       <div className="popList">{shown.map(p=><button key={p.id} className="popPerson" onClick={()=>openDetail({kind:"person",item:p})}>
+         <Avatar person={p} size={56}/>
+         <span>
+           <b>{p.name}{p.minor&&<MinorBadge/>}</b>
+           <small>{p.area}</small>
+           <span className="popMiniChips">{p.tags.slice(0,4).map(t=><i key={t}>{t}</i>)}</span>
+         </span>
+       </button>)}</div>}
+    </div>
+  </div>;
 }
 
 // ---------------------------------------------------------------------------
@@ -470,54 +504,95 @@ function PopChoice({label,value,onChange,options}){
 // ---------------------------------------------------------------------------
 
 function Me({ctx,tagOptions,logout,openAdmin,profile,saveProfile,message}){
-  const {clubs,clubMembers,userId,openDetail}=ctx;
   const [editing,setEditing]=useState(false);
-  const joined=clubMembers.filter(m=>m.member_id===userId).map(m=>({...m,item:clubs.find(c=>c.id===m.club_id)})).filter(x=>x.item);
-  const person={name:profile?.name};
+  const person=toPerson(profile||{});
 
-  return <PageShell hero={{image:TOP_IMAGES.me,kicker:"MY PAGE",title:"マイページ",lead:"あなたの西海でのつながりと活動"}}>
-    {editing
-      ? <div className="entryForm profileEdit">
-          <div className="formTitle"><b>プロフィールを編集</b><button type="button" onClick={()=>setEditing(false)} aria-label="閉じる">×</button></div>
-          <ProfileForm initial={profile} minor={!!profile?.is_minor} tagOptions={tagOptions} saveProfile={saveProfile} submitLabel="保存する" onSaved={()=>setEditing(false)}/>
-        </div>
-      : <div className="profileCard">
-          <Avatar person={person} size={76}/>
-          <h3>{profile?.name||"メンバー"}{profile?.is_minor&&<MinorBadge/>}</h3>
-          <p>{profile?.area||"地区未設定"}</p>
-          {profile?.bio&&<p className="profileBio">{profile.bio}</p>}
-          <div className="tags profileTags">{uniqueTags(profile?.tags||[]).map(t=><span key={t}>{t}</span>)}</div>
-          <button className="secondaryCta" onClick={()=>setEditing(true)}>プロフィールを編集</button>
-        </div>}
+  if(editing) return <div className="popPage popScreen">
+    <Confetti/>
+    <header className="popTopBar"><button onClick={()=>setEditing(false)} aria-label="戻る">‹</button></header>
+    <div className="popStack">
+      <h1 className="popName">プロフィールを編集</h1>
+      <ProfileForm initial={profile} minor={!!profile?.is_minor} tagOptions={tagOptions} saveProfile={saveProfile} submitLabel="保存する" onSaved={()=>setEditing(false)}/>
+      {message&&<p className="popWarn" role="alert">{message}</p>}
+    </div>
+  </div>;
 
-    {profile?.role==="admin"&&<section className="quickActions"><button className="adminEntry" onClick={openAdmin}>運営メニュー</button></section>}
-    {message&&<div className="inlineMessage">{message}</div>}
+  return <PersonPage person={person} ctx={ctx} top={<>
+    <div className="popMeBar">
+      <button className="popSmallBtn" onClick={()=>setEditing(true)}>プロフィールを編集</button>
+      {profile?.role==="admin"&&<button className="popSmallBtn ghost" onClick={openAdmin}>運営メニュー</button>}
+    </div>
+    {message&&<p className="popWarn" role="alert">{message}</p>}
+  </>} bottom={<MeFooter logout={logout}/>}/>;
+}
 
-    <section className="myActivity"><h2>参加中のクラブ</h2>{joined.length?joined.map(x=><div className="myActionRow clickable" key={x.club_id} onClick={()=>openDetail({kind:"club",item:x.item})}><span>{formatDay(x.created_at)} 参加</span><b>{x.item.name}</b></div>):<p>まだ参加していません。「クラブ」から気になる集まりを探してみましょう。</p>}</section>
-
-    <button className="logout" onClick={logout}>ログアウト</button>
-  </PageShell>;
+function MeFooter({logout}){
+  return <button className="popLogout" onClick={logout}>ログアウト</button>;
 }
 
 function ProfileForm({initial,minor,tagOptions=[],saveProfile,submitLabel,onSaved}){
   const [form,setForm]=useState({
     name:initial?.name||"",area:initial?.area||"",bio:initial?.bio||"",
-    tags:initial?.tags||[]
+    tags:initial?.tags||[],
+    spot_districts:initial?.spot_districts||[],
+    spot_places:initial?.spot_places?.length?initial.spot_places:[""],
+    contacts:(initial?.contacts||[]).map(c=>({type:c.type||"line",value:c.value||""}))
   });
   const [saving,setSaving]=useState(false);
+  const set=(k,v)=>setForm(f=>({...f,[k]:v}));
+  const toggleDistrict=d=>set("spot_districts",form.spot_districts.includes(d)?form.spot_districts.filter(x=>x!==d):[...form.spot_districts,d]);
+  const setPlace=(i,v)=>set("spot_places",form.spot_places.map((p,j)=>j===i?v:p));
+  const setContact=(i,k,v)=>set("contacts",form.contacts.map((c,j)=>j===i?{...c,[k]:v}:c));
+
   async function submit(e){
     e.preventDefault(); setSaving(true);
-    const ok=await saveProfile(form);
+    const ok=await saveProfile({
+      ...form,
+      spot_places:minor?[]:form.spot_places.map(p=>p.trim()).filter(Boolean).slice(0,MAX_PLACES),
+      spot_districts:minor?[]:form.spot_districts,
+      contacts:minor?[]:form.contacts.map(c=>({type:c.type,value:c.value.trim()})).filter(c=>c.value).slice(0,MAX_CONTACTS)
+    });
     setSaving(false);
     if(ok) onSaved?.();
   }
-  return <form className="profileForm" onSubmit={submit}>
-    <label>{minor?"ニックネーム":"名前"}<input required maxLength={80} value={form.name} onChange={e=>setForm({...form,name:e.target.value})}/>{minor&&<span className="formHint">本名ではなく、ニックネームを入れてください。</span>}</label>
-    <label>住んでいる地区<select required value={form.area} onChange={e=>setForm({...form,area:e.target.value})}><option value="">選択してください</option><option>西彼町</option><option>西海町</option><option>大島町</option><option>崎戸町</option><option>大瀬戸町</option><option>市外・西海に関わる</option></select></label>
-    <label>自己紹介<textarea rows="4" maxLength={500} value={form.bio} onChange={e=>setForm({...form,bio:e.target.value})}/></label>
-    <TagPicker value={form.tags} options={tagOptions} onChange={tags=>setForm(f=>({...f,tags}))}/>
-    <p className="formHint">「AI」「釣り」「音楽」「芸術」「地域のお店」を入れると、「つながる」のカテゴリーに表示されます。</p>
-    <button className="primaryCta fullCta" disabled={saving}>{saving?"保存中…":submitLabel}</button>
+
+  return <form className="popForm popStack" onSubmit={submit}>
+    <section className="popCard">
+      <label className="popField">{minor?"ニックネーム":"名前"}<input required maxLength={80} value={form.name} onChange={e=>set("name",e.target.value)}/>{minor&&<span className="popHint">本名ではなく、ニックネームを入れてください。</span>}</label>
+      <label className="popField">住んでいる地区<select required value={form.area} onChange={e=>set("area",e.target.value)}><option value="">選んでください</option>{DISTRICTS.map(d=><option key={d}>{d}</option>)}</select></label>
+      <label className="popField">ひとこと（自己紹介）<small>任意</small><textarea rows="3" maxLength={500} value={form.bio} onChange={e=>set("bio",e.target.value)}/></label>
+    </section>
+
+    <section className="popCard"><TagPicker value={form.tags} options={tagOptions} onChange={tags=>set("tags",tags)}/>
+      <span className="popHint">「AI」「釣り」「音楽」「芸術」「地域のお店」を入れると、「つながる」のカテゴリーに表示されます。</span>
+    </section>
+
+    {!minor&&<section className="popCard">
+      <h2>よくいる場所<small>任意</small></h2>
+      <div className="popField">地区（いくつでも）
+        <div className="popChoice wrap" role="group" aria-label="よくいる地区">
+          {DISTRICTS.map(d=><button type="button" key={d} aria-pressed={form.spot_districts.includes(d)} className={form.spot_districts.includes(d)?"on":""} onClick={()=>toggleDistrict(d)}>{d}</button>)}
+        </div>
+      </div>
+      <div className="popField">具体的な場所（3つまで）
+        <p className="popWarn">ここに書いた場所は、ログインしている全員に見えます。</p>
+        {form.spot_places.map((p,i)=><input key={i} maxLength={60} value={p} onChange={e=>setPlace(i,e.target.value)} placeholder="例：大島港の東の釣りポイント" aria-label={`具体的な場所${i+1}`}/>)}
+        {form.spot_places.length<MAX_PLACES&&<button type="button" className="popSmallBtn ghost" onClick={()=>set("spot_places",[...form.spot_places,""])}>＋ 場所を追加</button>}
+      </div>
+    </section>}
+
+    {!minor&&<section className="popCard">
+      <h2>連絡先<small>任意・5件まで</small></h2>
+      <span className="popHint">入れた連絡先は、ログインしている全員に見えます。</span>
+      {form.contacts.map((c,i)=><div className="popContact" key={i}>
+        <select aria-label={`連絡先${i+1}の種類`} value={c.type} onChange={e=>setContact(i,"type",e.target.value)}>{CONTACT_TYPES.map(([id,label])=><option key={id} value={id}>{label}</option>)}</select>
+        <input aria-label={`連絡先${i+1}`} maxLength={200} value={c.value} onChange={e=>setContact(i,"value",e.target.value)} placeholder={CONTACT_PLACEHOLDERS[c.type]}/>
+        <button type="button" className="popSmallBtn ghost" onClick={()=>set("contacts",form.contacts.filter((_,j)=>j!==i))}>この連絡先を消す</button>
+      </div>)}
+      {form.contacts.length<MAX_CONTACTS&&<button type="button" className="popSmallBtn" onClick={()=>set("contacts",[...form.contacts,{type:"line",value:""}])}>＋ 連絡先を追加</button>}
+    </section>}
+
+    <button className="popBtn" disabled={saving}>{saving?"保存中…":submitLabel}</button>
   </form>;
 }
 
@@ -595,21 +670,7 @@ function contactHref(url=""){
 function DetailView({detail,onBack,ctx}){
   const {kind,item}=detail;
 
-  if(kind==="person"){
-    return <div className="detailPage">
-      <DetailHeader onBack={onBack}/>
-      <section className="personDetailHero">
-        <Avatar person={item} size={110}/>
-        <h1>{item.name}{item.minor&&<MinorBadge/>}</h1>
-        <p>{item.area}</p>
-        <div className="tags detailTags">{(item.tags||[]).map(t=><span key={t}>{t}</span>)}</div>
-      </section>
-      <section className="detailBody">
-        <DetailBlock title="この人について"><p>{item.bio||"まだ自己紹介がありません。"}</p></DetailBlock>
-        <DetailBlock title="属性タグ"><div className="detailChips">{(item.tags||[]).map(t=><span key={t}>{t}</span>)}</div></DetailBlock>
-      </section>
-    </div>;
-  }
+  if(kind==="person") return <PersonPage person={item} ctx={ctx} onBack={onBack}/>;
 
   if(kind==="clubForm") return <ClubForm club={item} onBack={item?()=>ctx.openDetail({kind:"club",item}):onBack} ctx={ctx}/>;
   return <ClubPage club={ctx.clubs.find(c=>c.id===item.id)||item} onBack={onBack} ctx={ctx}/>;
@@ -843,10 +904,3 @@ function ClubForm({club,onBack,ctx}){
   </div>;
 }
 
-function DetailHeader({onBack}){
-  return <header className="detailHeader"><button onClick={onBack} aria-label="戻る">‹</button><Logo/><span></span></header>;
-}
-
-function DetailBlock({title,children}){
-  return <section className="detailBlock"><h2>{title}</h2>{children}</section>;
-}

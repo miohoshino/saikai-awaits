@@ -347,3 +347,19 @@ body{background:#edf2f5}
 .tagAdd{display:grid;grid-template-columns:1fr auto;gap:6px}
 .tagAdd button{border:0;border-radius:999px;background:#ff4f9a;color:#fff;padding:0 16px;font:inherit;font-size:13px;font-weight:900;cursor:pointer}
 .tagAdd button:disabled{opacity:.5;cursor:default}
+
+/* Personal page, my page, people (step 12) */
+.popHero{display:grid;justify-items:center;text-align:center;gap:6px}
+.popAvatar{display:grid;place-items:center;border-radius:50%;border:4px solid #fff;object-fit:cover;font-family:var(--font-dela),sans-serif;color:var(--ink)}
+.popSub{margin:0;font-size:13px;font-weight:700;color:var(--muted)}
+.popTagChips{display:flex;flex-wrap:wrap;gap:6px;justify-content:center}
+.popTagChips span{background:#fff;border-radius:999px;padding:4px 10px;font-size:12px;font-weight:700}
+.popMuted{color:var(--muted);font-size:13px}
+.popMeBar{display:flex;flex-wrap:wrap;gap:8px;justify-content:center}
+.popLogout{margin-top:8px;border:0;border-radius:999px;padding:12px;background:rgba(255,255,255,.6);color:var(--muted);font:inherit;font-size:13px;font-weight:900;cursor:pointer}
+.popChoice.wrap{flex-wrap:wrap;overflow:visible}
+.popChoice.wrap button{border-color:#d8e7f0}
+.popChoice.wrap button.on{border-color:var(--ink)}
+.popContact select{width:100%;font:inherit;font-size:14px;border:2px solid #d8e7f0;border-radius:12px;padding:10px;background:#fff;color:var(--ink)}
+.popField .popWarn{font-weight:700}
+.popForm .tagPicker input{border:2px solid #d8e7f0;border-radius:12px}
