@@ -24,7 +24,6 @@ const CLUB_COLUMNS="id,name,activity,description,district,venue,frequency,contac
 
 function normTag(t=""){return t.normalize("NFKC").trim().toLowerCase();}
 const MAX_TAGS=20;
-function splitList(v="",max=8){return v.split(/[,、，]/).map(x=>x.trim()).filter(Boolean).slice(0,max);}
 function uniqueTags(list){const seen=new Set();return list.filter(t=>{const k=normTag(t);if(!k||seen.has(k))return false;seen.add(k);return true;});}
 
 function formatDay(v){
@@ -69,6 +68,7 @@ export default function Page(){
   const [clubMembers,setClubMembers]=useState([]);
   const [profile,setProfile]=useState(null);
   const [directory,setDirectory]=useState([]);
+  const [tagList,setTagList]=useState([]);
   const [message,setMessage]=useState("");
   const [tab,setTab]=useState("home");
   const [detail,setDetail]=useState(null);
@@ -93,7 +93,7 @@ export default function Page(){
   },[adminOpen,detail,tab]);
 
   async function loadAll(uid){
-    await Promise.all([loadClubs(),loadDirectory()]);
+    await Promise.all([loadClubs(),loadDirectory(),loadTags()]);
   }
 
   async function loadClubs(){
@@ -121,6 +121,11 @@ export default function Page(){
     return data;
   }
 
+  async function loadTags(){
+    const {data}=await supabase.from("tags").select("label,is_official");
+    setTagList(data||[]);
+  }
+
   async function loadDirectory(){
     const {data}=await supabase.from("members").select("id,name,area,bio,tags,avatar_url,is_minor").eq("visible",true).neq("name","").order("updated_at",{ascending:false});
     setDirectory(data||[]);
@@ -134,7 +139,7 @@ export default function Page(){
       tags:uniqueTags(payload.tags||[]).slice(0,MAX_TAGS)
     }).eq("id",userId).select().single();
     if(error){setMessage("プロフィールを保存できませんでした。");return false;}
-    setProfile(data); await loadDirectory(); setMessage(""); return true;
+    setProfile(data); await Promise.all([loadDirectory(),loadTags()]); setMessage(""); return true;
   }
 
   async function enter(){
@@ -165,6 +170,12 @@ export default function Page(){
     setAnchor(nextAnchor);
     setDetail(null); setAdminOpen(false); setTab(nextTab);
   }
+
+  const tagOptions=useMemo(()=>{
+    const uses={};
+    for(const m of directory) for(const t of m.tags||[]) uses[t]=(uses[t]||0)+1;
+    return [...tagList].sort((a,b)=>Number(b.is_official)-Number(a.is_official)||(uses[b.label]||0)-(uses[a.label]||0)||a.label.localeCompare(b.label,"ja")).map(t=>t.label);
+  },[tagList,directory]);
 
   const others=useMemo(()=>directory.filter(x=>x.id!==userId).map(toPerson),[directory,userId]);
 
@@ -220,7 +231,7 @@ export default function Page(){
         <div className="pageKicker">WELCOME TO SAIKAI</div>
         <h1>あなたのことを、少しだけ。</h1>
         <p>西海で「誰とつながれるか」が分かるプロフィールをつくります。</p>
-        <ProfileForm saveProfile={saveProfile} minor={!!profile?.is_minor} submitLabel="SAIKAI AWAITS をはじめる"/>
+        <ProfileForm saveProfile={saveProfile} minor={!!profile?.is_minor} tagOptions={tagOptions} submitLabel="SAIKAI AWAITS をはじめる"/>
       </section></div>
     </section></main>;
   }
@@ -233,7 +244,7 @@ export default function Page(){
         {tab==="home"&&<Home ctx={ctx} profile={profile} others={others}/>}
         {tab==="people"&&<People ctx={ctx} others={others}/>}
         {tab==="community"&&<Community ctx={ctx}/>}
-        {tab==="me"&&<Me ctx={ctx} logout={logout} openAdmin={()=>setAdminOpen(true)} profile={profile} saveProfile={saveProfile} message={message}/>}
+        {tab==="me"&&<Me ctx={ctx} tagOptions={tagOptions} logout={logout} openAdmin={()=>setAdminOpen(true)} profile={profile} saveProfile={saveProfile} message={message}/>}
       </>}
       <nav className="bottomNav" aria-label="メインメニュー">
         {navItems.map(([id,label,icon])=><button key={id} className={!adminOpen&&tab===id?"active":""} aria-current={!adminOpen&&!detail&&tab===id?"page":undefined} onClick={()=>go(id)}>
@@ -458,7 +469,7 @@ function PopChoice({label,value,onChange,options}){
 // My page
 // ---------------------------------------------------------------------------
 
-function Me({ctx,logout,openAdmin,profile,saveProfile,message}){
+function Me({ctx,tagOptions,logout,openAdmin,profile,saveProfile,message}){
   const {clubs,clubMembers,userId,openDetail}=ctx;
   const [editing,setEditing]=useState(false);
   const joined=clubMembers.filter(m=>m.member_id===userId).map(m=>({...m,item:clubs.find(c=>c.id===m.club_id)})).filter(x=>x.item);
@@ -468,7 +479,7 @@ function Me({ctx,logout,openAdmin,profile,saveProfile,message}){
     {editing
       ? <div className="entryForm profileEdit">
           <div className="formTitle"><b>プロフィールを編集</b><button type="button" onClick={()=>setEditing(false)} aria-label="閉じる">×</button></div>
-          <ProfileForm initial={profile} minor={!!profile?.is_minor} saveProfile={saveProfile} submitLabel="保存する" onSaved={()=>setEditing(false)}/>
+          <ProfileForm initial={profile} minor={!!profile?.is_minor} tagOptions={tagOptions} saveProfile={saveProfile} submitLabel="保存する" onSaved={()=>setEditing(false)}/>
         </div>
       : <div className="profileCard">
           <Avatar person={person} size={76}/>
@@ -488,15 +499,15 @@ function Me({ctx,logout,openAdmin,profile,saveProfile,message}){
   </PageShell>;
 }
 
-function ProfileForm({initial,minor,saveProfile,submitLabel,onSaved}){
+function ProfileForm({initial,minor,tagOptions=[],saveProfile,submitLabel,onSaved}){
   const [form,setForm]=useState({
     name:initial?.name||"",area:initial?.area||"",bio:initial?.bio||"",
-    tags:(initial?.tags||[]).join(", ")
+    tags:initial?.tags||[]
   });
   const [saving,setSaving]=useState(false);
   async function submit(e){
     e.preventDefault(); setSaving(true);
-    const ok=await saveProfile({...form,tags:splitList(form.tags,MAX_TAGS)});
+    const ok=await saveProfile(form);
     setSaving(false);
     if(ok) onSaved?.();
   }
@@ -504,10 +515,44 @@ function ProfileForm({initial,minor,saveProfile,submitLabel,onSaved}){
     <label>{minor?"ニックネーム":"名前"}<input required maxLength={80} value={form.name} onChange={e=>setForm({...form,name:e.target.value})}/>{minor&&<span className="formHint">本名ではなく、ニックネームを入れてください。</span>}</label>
     <label>住んでいる地区<select required value={form.area} onChange={e=>setForm({...form,area:e.target.value})}><option value="">選択してください</option><option>西彼町</option><option>西海町</option><option>大島町</option><option>崎戸町</option><option>大瀬戸町</option><option>市外・西海に関わる</option></select></label>
     <label>自己紹介<textarea rows="4" maxLength={500} value={form.bio} onChange={e=>setForm({...form,bio:e.target.value})}/></label>
-    <label>属性タグ（カンマ区切り・20個まで）<input value={form.tags} onChange={e=>setForm({...form,tags:e.target.value})} placeholder="釣り, 犬を飼っている, 元野球部"/></label>
+    <TagPicker value={form.tags} options={tagOptions} onChange={tags=>setForm(f=>({...f,tags}))}/>
     <p className="formHint">「AI」「釣り」「音楽」「芸術」「地域のお店」を入れると、「つながる」のカテゴリーに表示されます。</p>
     <button className="primaryCta fullCta" disabled={saving}>{saving?"保存中…":submitLabel}</button>
   </form>;
+}
+
+function TagPicker({value,options,onChange}){
+  const [q,setQ]=useState("");
+  const [draft,setDraft]=useState("");
+  const selected=new Set(value);
+  const full=value.length>=MAX_TAGS;
+  const all=[...value.filter(t=>!options.includes(t)),...options];
+  const shown=all.filter(t=>!q.trim()||t.toLowerCase().includes(q.trim().toLowerCase()));
+
+  function toggle(t){
+    if(selected.has(t)) onChange(value.filter(x=>x!==t));
+    else if(!full) onChange([...value,t]);
+  }
+  function add(){
+    const t=draft.trim().slice(0,40);
+    if(!t) return;
+    if(!selected.has(t)&&!full) onChange([...value,t]);
+    setDraft(""); setQ("");
+  }
+
+  return <div className="tagPicker">
+    <div className="tagPickerHead"><b>属性タグ</b><small>{value.length}／{MAX_TAGS}</small></div>
+    <input value={q} onChange={e=>setQ(e.target.value)} placeholder="タグを探す" aria-label="タグを探す"/>
+    <div className="tagChoices" role="group" aria-label="属性タグを選ぶ">
+      {shown.map(t=><button type="button" key={t} aria-pressed={selected.has(t)} className={selected.has(t)?"on":""} disabled={!selected.has(t)&&full} onClick={()=>toggle(t)}>{t}</button>)}
+      {!shown.length&&<span className="formHint">見つかりません。下から新しいタグとして追加できます。</span>}
+    </div>
+    <div className="tagAdd">
+      <input value={draft} maxLength={40} onChange={e=>setDraft(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();add();}}} placeholder="＋ 新しいタグ（例：元野球部）" aria-label="新しいタグ"/>
+      <button type="button" onClick={add} disabled={!draft.trim()||full}>追加</button>
+    </div>
+    <span className="formHint">追加したタグは、保存すると他の人も選べるようになります。</span>
+  </div>;
 }
 
 // ---------------------------------------------------------------------------
