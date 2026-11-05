@@ -422,11 +422,38 @@ function PersonPage({person,ctx,onBack,top,bottom}){
 // People
 // ---------------------------------------------------------------------------
 
+function PersonButton({person:p,openDetail,note}){
+  return <button className="popPerson" onClick={()=>openDetail({kind:"person",item:p})}>
+    <Avatar person={p} size={56}/>
+    <span>
+      <b>{p.name}{p.minor&&<MinorBadge/>}</b>
+      <small>{p.area}</small>
+      {note?<small className="popCommon">{note}</small>:<span className="popMiniChips">{p.tags.slice(0,4).map(t=><i key={t}>{t}</i>)}</span>}
+    </span>
+  </button>;
+}
+
 function People({ctx,others}){
-  const {openDetail}=ctx;
+  const {openDetail,profile,clubs,clubMembers,userId}=ctx;
   const [q,setQ]=useState("");
   const [category,setCategory]=useState("all");
-  const matched=others.filter(x=>[x.name,x.area,x.bio,...x.rawTags].join(" ").toLowerCase().includes(q.trim().toLowerCase()));
+  const [tagFilter,setTagFilter]=useState("");
+
+  // SPEC 4-3 / 5: adults do not see minors in "similar people" or in the commonality counts.
+  const pool=profile?.is_minor?others:others.filter(p=>!p.minor);
+  const myTags=uniqueTags(profile?.tags||[]);
+  const myTagKeys=new Set(myTags.map(normTag));
+  const myClubIds=new Set(clubMembers.filter(m=>m.member_id===userId).map(m=>m.club_id));
+  const hasTag=(p,t)=>p.rawTags.some(x=>normTag(x)===normTag(t));
+  const common=myTags.map(t=>[t,pool.filter(p=>hasTag(p,t)).length]).filter(([,n])=>n>0).sort((a,b)=>b[1]-a[1]);
+  const similar=pool.map(p=>{
+    const tags=p.rawTags.filter(t=>myTagKeys.has(normTag(t)));
+    const shared=clubMembers.filter(m=>m.member_id===p.id&&myClubIds.has(m.club_id)).map(m=>clubs.find(c=>c.id===m.club_id)?.name).filter(Boolean);
+    return {p,score:tags.length+shared.length,common:[...tags,...shared]};
+  }).filter(x=>x.score>0).sort((a,b)=>b.score-a.score).slice(0,10);
+
+  const base=tagFilter?pool.filter(p=>hasTag(p,tagFilter)):others;
+  const matched=base.filter(x=>[x.name,x.area,x.bio,...x.rawTags].join(" ").toLowerCase().includes(q.trim().toLowerCase()));
   const counts=Object.fromEntries([...PEOPLE_CATEGORIES,"その他"].map(c=>[c,matched.filter(p=>personCategories(p).includes(c)).length]));
   const shown=category==="all"?matched:matched.filter(p=>personCategories(p).includes(category));
 
@@ -434,18 +461,26 @@ function People({ctx,others}){
     <Confetti/>
     <div className="popStack">
       <h1 className="popName">つながる</h1>
+
+      {common.length>0&&<section className="popCard">
+        <h2>あなたとの共通点</h2>
+        <div className="popChoice wrap" role="group" aria-label="共通点で絞り込む">
+          {common.map(([t,n])=><button key={t} aria-pressed={tagFilter===t} className={tagFilter===t?"on":""} onClick={()=>setTagFilter(tagFilter===t?"":t)}>{t} {n}人</button>)}
+        </div>
+      </section>}
+
+      {!tagFilter&&similar.length>0&&<>
+        <h2 className="popSecHead">似た人</h2>
+        <div className="popList">{similar.map(({p,common})=><PersonButton key={p.id} person={p} openDetail={openDetail} note={`共通：${common.join("・")}`}/>)}</div>
+      </>}
+
+      <h2 className="popSecHead">{tagFilter?`「${tagFilter}」の人`:"みんな"}</h2>
+      {tagFilter&&<button className="popLinkBtn" onClick={()=>setTagFilter("")}>絞り込みをやめる 〉</button>}
       <input className="popSearch" value={q} onChange={e=>setQ(e.target.value)} placeholder="名前・地区・タグで探す" aria-label="メンバーを検索"/>
       <PopChoice label="カテゴリー" value={category} onChange={setCategory} options={[["all","すべて"],...[...PEOPLE_CATEGORIES,"その他"].filter(c=>counts[c]).map(c=>[c,`${c} ${counts[c]}`])]}/>
       {!others.length?<p className="popEmpty">まだ他のメンバーがいません。招待した人が参加すると、ここに表示されます。</p>:
        !shown.length?<p className="popEmpty">条件に合うメンバーが見つかりませんでした。</p>:
-       <div className="popList">{shown.map(p=><button key={p.id} className="popPerson" onClick={()=>openDetail({kind:"person",item:p})}>
-         <Avatar person={p} size={56}/>
-         <span>
-           <b>{p.name}{p.minor&&<MinorBadge/>}</b>
-           <small>{p.area}</small>
-           <span className="popMiniChips">{p.tags.slice(0,4).map(t=><i key={t}>{t}</i>)}</span>
-         </span>
-       </button>)}</div>}
+       <div className="popList">{shown.map(p=><PersonButton key={p.id} person={p} openDetail={openDetail}/>)}</div>}
     </div>
   </div>;
 }

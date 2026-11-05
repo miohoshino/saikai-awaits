@@ -363,3 +363,4 @@ body{background:#edf2f5}
 .popContact select{width:100%;font:inherit;font-size:14px;border:2px solid #d8e7f0;border-radius:12px;padding:10px;background:#fff;color:var(--ink)}
 .popField .popWarn{font-weight:700}
 .popForm .tagPicker input{border:2px solid #d8e7f0;border-radius:12px}
+.popCommon{color:var(--pink)!important;font-weight:900!important;line-height:1.5}
