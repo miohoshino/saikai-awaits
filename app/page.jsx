@@ -220,7 +220,7 @@ export default function Page(){
         <div className="pageKicker">WELCOME TO SAIKAI</div>
         <h1>あなたのことを、少しだけ。</h1>
         <p>西海で「誰とつながれるか」が分かるプロフィールをつくります。</p>
-        <ProfileForm saveProfile={saveProfile} submitLabel="SAIKAI AWAITS をはじめる"/>
+        <ProfileForm saveProfile={saveProfile} minor={!!profile?.is_minor} submitLabel="SAIKAI AWAITS をはじめる"/>
       </section></div>
     </section></main>;
   }
@@ -416,7 +416,7 @@ function Me({ctx,logout,openAdmin,profile,saveProfile,message}){
     {editing
       ? <div className="entryForm profileEdit">
           <div className="formTitle"><b>プロフィールを編集</b><button type="button" onClick={()=>setEditing(false)} aria-label="閉じる">×</button></div>
-          <ProfileForm initial={profile} saveProfile={saveProfile} submitLabel="保存する" onSaved={()=>setEditing(false)}/>
+          <ProfileForm initial={profile} minor={!!profile?.is_minor} saveProfile={saveProfile} submitLabel="保存する" onSaved={()=>setEditing(false)}/>
         </div>
       : <div className="profileCard">
           <Avatar person={person} size={76}/>
@@ -436,7 +436,7 @@ function Me({ctx,logout,openAdmin,profile,saveProfile,message}){
   </PageShell>;
 }
 
-function ProfileForm({initial,saveProfile,submitLabel,onSaved}){
+function ProfileForm({initial,minor,saveProfile,submitLabel,onSaved}){
   const [form,setForm]=useState({
     name:initial?.name||"",area:initial?.area||"",organization:initial?.organization||"",bio:initial?.bio||"",
     tags:(initial?.tags||[]).join(", "),skills:(initial?.skills||[]).join(", ")
@@ -449,7 +449,7 @@ function ProfileForm({initial,saveProfile,submitLabel,onSaved}){
     if(ok) onSaved?.();
   }
   return <form className="profileForm" onSubmit={submit}>
-    <label>名前<input required maxLength={80} value={form.name} onChange={e=>setForm({...form,name:e.target.value})}/></label>
+    <label>{minor?"ニックネーム":"名前"}<input required maxLength={80} value={form.name} onChange={e=>setForm({...form,name:e.target.value})}/>{minor&&<span className="formHint">本名ではなく、ニックネームを入れてください。</span>}</label>
     <label>西海との関係<select required value={form.area} onChange={e=>setForm({...form,area:e.target.value})}><option value="">選択してください</option><option>西彼町</option><option>西海町</option><option>大島町</option><option>崎戸町</option><option>大瀬戸町</option><option>市外・西海に関わる</option></select></label>
     <label>所属<input maxLength={120} value={form.organization} onChange={e=>setForm({...form,organization:e.target.value})}/></label>
     <label>自己紹介<textarea rows="4" maxLength={500} value={form.bio} onChange={e=>setForm({...form,bio:e.target.value})}/></label>
