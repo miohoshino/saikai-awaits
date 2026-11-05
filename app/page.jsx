@@ -7,7 +7,7 @@ import Admin from "./Admin";
 const navItems=[
   ["home","ホーム","⌂"],
   ["people","つながる","♙"],
-  ["community","コミュニティ","♧"],
+  ["community","クラブ","♧"],
   ["me","マイページ","○"]
 ];
 
@@ -19,11 +19,8 @@ const TOP_IMAGES={
 };
 
 const PEOPLE_CATEGORIES=["AI","釣り","音楽","芸術","地域のお店"];
-const JOIN_MESSAGE="コミュニティに参加しました！";
+const CLUB_COLUMNS="id,name,activity,description,district,venue,frequency,contacts,is_paid,minors_ok,image_url,updated_at,created_at";
 
-const ENTRY_COLUMNS="id,kind,status,title,summary,body,area,tags,details,image_url,source_name,source_url,submitted_by,community_id,published_at,created_at";
-
-function cleanTitle(v=""){return v.replace(/^【デモ】/,"");}
 function normTag(t=""){return t.normalize("NFKC").trim().toLowerCase();}
 function splitList(v=""){return v.split(/[,、]/).map(x=>x.trim()).filter(Boolean).slice(0,8);}
 function uniqueTags(list){const seen=new Set();return list.filter(t=>{const k=normTag(t);if(!k||seen.has(k))return false;seen.add(k);return true;});}
@@ -67,11 +64,10 @@ function Avatar({person,size=54}){
 export default function Page(){
   const [userId,setUserId]=useState("");
   const [invite,setInvite]=useState("");
-  const [entries,setEntries]=useState([]);
+  const [clubs,setClubs]=useState([]);
+  const [clubMembers,setClubMembers]=useState([]);
   const [profile,setProfile]=useState(null);
   const [directory,setDirectory]=useState([]);
-  const [actions,setActions]=useState([]);
-  const [actionCounts,setActionCounts]=useState({});
   const [message,setMessage]=useState("");
   const [tab,setTab]=useState("home");
   const [detail,setDetail]=useState(null);
@@ -96,13 +92,16 @@ export default function Page(){
   },[adminOpen,detail,tab]);
 
   async function loadAll(uid){
-    await Promise.all([loadEntries(),loadDirectory(),loadActions(uid),loadActionCounts()]);
+    await Promise.all([loadClubs(),loadDirectory()]);
   }
 
-  async function loadEntries(){
-    const {data,error}=await supabase.from("entries").select(ENTRY_COLUMNS).eq("status","published").eq("kind","community").order("published_at",{ascending:false});
-    if(error){setMessage("コンテンツを読み込めませんでした。");return;}
-    setEntries(data||[]);
+  async function loadClubs(){
+    const [c,m]=await Promise.all([
+      supabase.from("clubs").select(CLUB_COLUMNS).order("updated_at",{ascending:false}),
+      supabase.from("club_members").select("club_id,member_id,is_admin,created_at").order("created_at",{ascending:true})
+    ]);
+    if(c.error||m.error){setMessage("クラブを読み込めませんでした。");return;}
+    setClubs(c.data||[]); setClubMembers(m.data||[]);
   }
 
   async function loadProfile(uid){
@@ -116,18 +115,6 @@ export default function Page(){
     setDirectory(data||[]);
   }
 
-  async function loadActions(uid){
-    const {data}=await supabase.from("member_entry_actions").select("entry_id,action,created_at").eq("member_id",uid).order("created_at",{ascending:false});
-    setActions(data||[]);
-  }
-
-  async function loadActionCounts(){
-    const {data}=await supabase.rpc("get_entry_action_counts");
-    const counts={};
-    for(const row of data||[]) counts[row.entry_id]={...counts[row.entry_id],[row.action]:Number(row.count)};
-    setActionCounts(counts);
-  }
-
   async function saveProfile(payload){
     const {data,error}=await supabase.from("members").update({
       name:payload.name.trim(),
@@ -139,21 +126,6 @@ export default function Page(){
     }).eq("id",userId).select().single();
     if(error){setMessage("プロフィールを保存できませんでした。");return false;}
     setProfile(data); await loadDirectory(); setMessage(""); return true;
-  }
-
-  function hasAction(entryId,action){
-    return actions.some(a=>a.entry_id===entryId&&a.action===action);
-  }
-
-  async function toggleAction(entryId,action){
-    if(!entryId) return false;
-    const enabled=!hasAction(entryId,action);
-    const {error}=enabled
-      ? await supabase.from("member_entry_actions").insert({member_id:userId,entry_id:entryId,action})
-      : await supabase.from("member_entry_actions").delete().match({member_id:userId,entry_id:entryId,action});
-    if(error) return false;
-    await Promise.all([loadActions(userId),loadActionCounts()]);
-    return true;
   }
 
   async function enter(){
@@ -177,7 +149,7 @@ export default function Page(){
   async function logout(){
     if(!window.confirm("ログアウトすると、この端末からは同じアカウントに戻れなくなります。本当にログアウトしますか？")) return;
     await supabase.auth.signOut();
-    setUserId(""); setEntries([]); setProfile(null); setDirectory([]); setActions([]); setActionCounts({}); setInvite(""); setTab("home"); setDetail(null); setAdminOpen(false); setMessage("");
+    setUserId(""); setClubs([]); setClubMembers([]); setProfile(null); setDirectory([]); setInvite(""); setTab("home"); setDetail(null); setAdminOpen(false); setMessage("");
   }
 
   function go(nextTab,nextAnchor=""){
@@ -187,7 +159,12 @@ export default function Page(){
 
   const others=useMemo(()=>directory.filter(x=>x.id!==userId).map(toPerson),[directory,userId]);
 
-  const ctx={communities:entries,actions,actionCounts,hasAction,toggleAction,openDetail:setDetail,go};
+  const peopleById=useMemo(()=>Object.fromEntries(directory.map(x=>[x.id,toPerson(x)])),[directory]);
+  // Members shown for a club: only profiles the viewer can see (visible, with a name).
+  const membersOf=clubId=>clubMembers.filter(m=>m.club_id===clubId&&peopleById[m.member_id]).map(m=>({...m,person:peopleById[m.member_id]}));
+  const isMemberOf=clubId=>clubMembers.some(m=>m.club_id===clubId&&m.member_id===userId);
+
+  const ctx={clubs,clubMembers,membersOf,isMemberOf,userId,openDetail:setDetail,go};
 
   if(!supabaseConfigured){
     return <main className="gate">
@@ -227,8 +204,8 @@ export default function Page(){
 
   return <main className="appStage">
     <section className="app">
-      {adminOpen ? <Admin onBack={()=>setAdminOpen(false)} onChanged={loadEntries}/>
-      : detail ? <DetailView key={detail.item?.id||detail.item?.name} detail={detail} onBack={()=>setDetail(null)} ctx={ctx}/>
+      {adminOpen ? <Admin onBack={()=>setAdminOpen(false)} onChanged={loadClubs}/>
+      : detail ? <DetailView key={detail.item?.id} detail={detail} onBack={()=>setDetail(null)} ctx={ctx}/>
       : <>
         {tab==="home"&&<Home ctx={ctx} profile={profile} others={others}/>}
         {tab==="people"&&<People ctx={ctx} others={others}/>}
@@ -304,17 +281,11 @@ function SectionHead({title,onMore}){
 // ---------------------------------------------------------------------------
 
 function Home({ctx,profile,others}){
-  const {communities,actionCounts,hasAction,toggleAction,openDetail,go}=ctx;
+  const {clubs,membersOf,isMemberOf,openDetail,go}=ctx;
   const myTags=[...(profile?.tags||[]),...(profile?.skills||[])].map(normTag);
   const shared=p=>p.rawTags.filter(t=>myTags.includes(normTag(t))).length;
   const person=[...others].sort((a,b)=>shared(b)-shared(a))[0];
-  const community=communities.find(c=>!hasAction(c.id,"joined"))||communities[0];
-
-  async function joinFromCard(e){
-    e.stopPropagation();
-    if(!hasAction(community.id,"joined")) await toggleAction(community.id,"joined");
-    openDetail({kind:"community",item:community,justJoined:true});
-  }
+  const club=clubs.find(c=>!isMemberOf(c.id))||clubs[0];
 
   return <div className="home">
     <header className="masthead" style={{backgroundImage:`linear-gradient(180deg,rgba(234,249,255,.85) 0%,rgba(240,252,255,.25) 35%,rgba(255,255,255,.1) 62%,#fff 100%),url("${TOP_IMAGES.home}")`}}>
@@ -329,7 +300,7 @@ function Home({ctx,profile,others}){
     <section className="content">
       <SectionHead title="あなたへのおすすめ" onMore={()=>go("community")}/>
 
-      <div className="recommendGrid" style={{gridTemplateColumns:`repeat(${[person,community].filter(Boolean).length||1},1fr)`}}>
+      <div className="recommendGrid" style={{gridTemplateColumns:`repeat(${[person,club].filter(Boolean).length||1},1fr)`}}>
         {person&&<article className="recommendCard clickable" onClick={()=>openDetail({kind:"person",item:person})}>
           <div className="personTop"><Avatar person={person} size={56}/><span className="addPerson" aria-hidden="true">♙+</span></div>
           <div className="greenKicker">♣ 気の合いそうな人</div>
@@ -338,13 +309,13 @@ function Home({ctx,profile,others}){
           <p>{person.bio}</p>
         </article>}
 
-        {community&&<article className="recommendCard clickable" onClick={()=>openDetail({kind:"community",item:community})}>
-          <img className="cardImage" src="https://images.unsplash.com/photo-1498654896293-37aacf113fd9?auto=format&fit=crop&w=700&q=80" alt=""/>
-          <div className="greenKicker">▣ おすすめのコミュニティ</div>
-          <h3>{cleanTitle(community.title)}</h3>
-          <div className="miniMeta">♟ メンバー {actionCounts[community.id]?.joined||0}人</div>
-          <p>{community.summary}</p>
-          <button className="softBlue" onClick={joinFromCard}>{hasAction(community.id,"joined")?"参加中 ✓":"参加する"}</button>
+        {club&&<article className="recommendCard clickable" onClick={()=>openDetail({kind:"club",item:club})}>
+          <ClubCover club={club} className="cardCover"/>
+          <div className="greenKicker">▣ おすすめのクラブ</div>
+          <h3>{club.name}</h3>
+          <div className="miniMeta">♟ メンバー {membersOf(club.id).length}人</div>
+          <p>{club.activity}</p>
+          <button className="softBlue">{isMemberOf(club.id)?"参加中 ✓":"見てみる"}</button>
         </article>}
       </div>
     </section>
@@ -387,16 +358,16 @@ function PersonRow({person:p,openDetail}){
 // ---------------------------------------------------------------------------
 
 function Community({ctx}){
-  const {communities,actionCounts,openDetail}=ctx;
+  const {clubs,membersOf,openDetail}=ctx;
 
-  return <PageShell hero={{image:TOP_IMAGES.community,kicker:"COMMUNITY",title:"コミュニティ",lead:"好きなことから、つながる。"}}>
-    {!communities.length?<p className="emptyNote">まだ登録がありません。</p>:
-    <div className="communityCards">{communities.map((x,i)=><article className="clickable" key={x.id} onClick={()=>openDetail({kind:"community",item:x})}>
-      <div className={"commCover c"+((i%3)+1)} style={x.image_url?{backgroundImage:`url("${x.image_url}")`}:undefined}></div>
+  return <PageShell hero={{image:TOP_IMAGES.community,kicker:"CLUB",title:"クラブ",lead:"好きなことから、つながる。"}}>
+    {!clubs.length?<p className="emptyNote">まだ登録がありません。</p>:
+    <div className="communityCards">{clubs.map(x=><article className="clickable" key={x.id} onClick={()=>openDetail({kind:"club",item:x})}>
+      <ClubCover club={x} className="commCover"/>
       <div>
-        <h3>{cleanTitle(x.title)}</h3>
-        <p>{x.summary}</p>
-        <small>♟ メンバー {actionCounts[x.id]?.joined||0}人 · {x.area}</small>
+        <h3>{x.name}</h3>
+        <p>{x.activity}</p>
+        <small>♟ メンバー {membersOf(x.id).length}人 · {x.district||"地区未設定"}</small>
       </div>
     </article>)}</div>}
   </PageShell>;
@@ -407,9 +378,9 @@ function Community({ctx}){
 // ---------------------------------------------------------------------------
 
 function Me({ctx,logout,openAdmin,profile,saveProfile,message}){
-  const {actions,communities,openDetail}=ctx;
+  const {clubs,clubMembers,userId,openDetail}=ctx;
   const [editing,setEditing]=useState(false);
-  const joined=actions.filter(a=>a.action==="joined").map(a=>({...a,item:communities.find(e=>e.id===a.entry_id)})).filter(x=>x.item);
+  const joined=clubMembers.filter(m=>m.member_id===userId).map(m=>({...m,item:clubs.find(c=>c.id===m.club_id)})).filter(x=>x.item);
   const person={name:profile?.name};
 
   return <PageShell hero={{image:TOP_IMAGES.me,kicker:"MY PAGE",title:"マイページ",lead:"あなたの西海でのつながりと活動"}}>
@@ -430,7 +401,7 @@ function Me({ctx,logout,openAdmin,profile,saveProfile,message}){
     {profile?.role==="admin"&&<section className="quickActions"><button className="adminEntry" onClick={openAdmin}>運営メニュー</button></section>}
     {message&&<div className="inlineMessage">{message}</div>}
 
-    <section className="myActivity"><h2>参加中のコミュニティ</h2>{joined.length?joined.map(x=><div className="myActionRow clickable" key={x.entry_id} onClick={()=>openDetail({kind:x.item.kind,item:x.item})}><span>{formatDay(x.created_at)} 参加</span><b>{cleanTitle(x.item.title)}</b></div>):<p>まだ参加していません。「コミュニティ」から気になる集まりに参加してみましょう。</p>}</section>
+    <section className="myActivity"><h2>参加中のクラブ</h2>{joined.length?joined.map(x=><div className="myActionRow clickable" key={x.club_id} onClick={()=>openDetail({kind:"club",item:x.item})}><span>{formatDay(x.created_at)} 参加</span><b>{x.item.name}</b></div>):<p>まだ参加していません。「クラブ」から気になる集まりを探してみましょう。</p>}</section>
 
     <button className="logout" onClick={logout}>ログアウト</button>
   </PageShell>;
@@ -464,13 +435,41 @@ function ProfileForm({initial,minor,saveProfile,submitLabel,onSaved}){
 // Detail screens
 // ---------------------------------------------------------------------------
 
-const COMMUNITY_IMAGE="https://images.unsplash.com/photo-1498654896293-37aacf113fd9?auto=format&fit=crop&w=1100&q=88";
+// Pop cover pattern for clubs without a photo; the pattern is picked from the club id so it stays the same.
+const COVER_PATTERNS=[
+  {bg:"linear-gradient(160deg,#5ec8f2 0%,#1c8fd0 58%,#0d5f9e 100%)",a:"#ffcf2e",b:"#ffffff",c:"#ff4f9a",d:"#0d2b4e"},
+  {bg:"linear-gradient(160deg,#ff9ec8 0%,#ff4f9a 100%)",a:"#ffcf2e",b:"#ffffff",c:"#0d2b4e",d:"#1fb57a"},
+  {bg:"linear-gradient(160deg,#ffe27a 0%,#ffcf2e 100%)",a:"#ff4f9a",b:"#ffffff",c:"#1fb57a",d:"#0d2b4e"},
+  {bg:"linear-gradient(160deg,#7fe0b4 0%,#1fb57a 100%)",a:"#ffcf2e",b:"#ffffff",c:"#ff4f9a",d:"#0d2b4e"}
+];
+const AVATAR_COLORS=["#ffcf2e","#ff9ec8","#9fe3c6","#a9d8ff","#ffd99a","#d6c4ff"];
+
+function hashOf(v=""){let h=0;for(const ch of v)h=(h*31+ch.charCodeAt(0))>>>0;return h;}
+
+function ClubCover({club,className}){
+  if(club?.image_url) return <div className={className+" clubCover"} role="img" aria-label={`${club.name}のトップイメージ`} style={{backgroundImage:`url("${club.image_url}")`}}></div>;
+  const p=COVER_PATTERNS[hashOf(club?.id)%COVER_PATTERNS.length];
+  return <div className={className+" clubCover"} aria-hidden="true" style={{background:p.bg}}>
+    <svg viewBox="0 0 300 150" preserveAspectRatio="xMidYMid slice">
+      <circle cx="232" cy="44" r="22" fill={p.a}/>
+      <path d="M0 102 q25 -14 50 0 t50 0 t50 0 t50 0 t50 0 t50 0 v48 h-300z" fill={p.b} opacity=".9"/>
+      <path d="M0 120 q25 -12 50 0 t50 0 t50 0 t50 0 t50 0 t50 0 v30 h-300z" fill={p.c} opacity=".85"/>
+      <path d="M70 92 l18 -34 l18 34 z" fill={p.d}/>
+      <rect x="140" y="30" width="26" height="8" rx="4" fill={p.d} transform="rotate(-20 153 34)"/>
+    </svg>
+  </div>;
+}
+
+// Only web links and phone numbers become clickable; anything else is shown as text.
+function contactHref(url=""){
+  const u=url.trim();
+  if(/^https?:\/\//i.test(u)) return u;
+  if(/^tel:[0-9+\-() ]+$/i.test(u)) return u;
+  return "";
+}
 
 function DetailView({detail,onBack,ctx}){
   const {kind,item}=detail;
-  const {actionCounts,hasAction,toggleAction}=ctx;
-  const [justJoined,setJustJoined]=useState(Boolean(detail.justJoined));
-  const title=cleanTitle(item?.title||item?.name||"");
 
   if(kind==="person"){
     return <div className="detailPage">
@@ -488,35 +487,66 @@ function DetailView({detail,onBack,ctx}){
     </div>;
   }
 
-  const on=action=>hasAction(item?.id,action);
+  return <ClubPage club={item} onBack={onBack} ctx={ctx}/>;
+}
 
-  async function toggleJoin(){
-    if(on("joined")){
-      if(!window.confirm("このコミュニティの参加をやめますか？")) return;
-      await toggleAction(item.id,"joined");
-      setJustJoined(false);
-      return;
-    }
-    if(await toggleAction(item.id,"joined")) setJustJoined(true);
-  }
+function ClubPage({club,onBack,ctx}){
+  const {membersOf,isMemberOf,openDetail}=ctx;
+  const [notice,setNotice]=useState("");
+  const members=membersOf(club.id);
+  const joined=isMemberOf(club.id);
+  const contacts=(Array.isArray(club.contacts)?club.contacts:[]).filter(c=>c&&(c.label||c.url||c.note));
+  const about=[["活動内容",club.activity],["活動場所",club.venue],["頻度",club.frequency]].filter(([,v])=>v);
 
-  return <div className="detailPage">
-    <DetailHeader onBack={onBack}/>
-    <div className="detailHeroImage" style={{backgroundImage:`linear-gradient(180deg,rgba(5,29,48,.05),rgba(5,29,48,.58)),url("${item?.image_url||COMMUNITY_IMAGE}")`}}>
-      <span className="detailLabel">COMMUNITY</span>
-      <h1>{title}</h1>
-      <p>{item?.summary}</p>
-    </div>
-    <section className="detailBody">
-      <div className="factGrid">
-        <Fact label="メンバー" value={`${actionCounts[item?.id]?.joined||0}人`}/>
-        <Fact label="エリア" value={item?.area||"西海市"}/>
-        <Fact label="あなた" value={on("joined")?"参加中":"未参加"}/>
+  return <div className="popPage">
+    <Confetti/>
+    <header className="popTopBar"><button onClick={onBack} aria-label="戻る">‹</button></header>
+    <div className="popStack">
+      <ClubCover club={club} className="popCover"/>
+      <h1 className="popName">{club.name}</h1>
+      <div className="popStats">
+        <div><small>メンバー</small><b>{members.length}人</b></div>
+        <div><small>エリア</small><b>{club.district||"未設定"}</b></div>
+        <div className="you"><small>あなた</small><b>{joined?"参加中":"未参加"}</b></div>
       </div>
-      <DetailBlock title="コミュニティについて"><p>{item?.body||item?.summary}</p></DetailBlock>
-      <button className={"primaryCta fullCta"+(on("joined")?" joinedCta":"")} onClick={toggleJoin}>{on("joined")?"参加中 ✓":"このコミュニティに参加"}</button>
-      {justJoined&&on("joined")&&<div className="joinMessage" role="status"><b>🎉 {JOIN_MESSAGE}</b></div>}
-    </section>
+      {about.length>0&&<section className="popCard">
+        <h2>コミュニティについて</h2>
+        <dl className="popRows">{about.map(([k,v])=><div key={k}><dt>{k}</dt><dd>{v}</dd></div>)}</dl>
+      </section>}
+      {club.description&&<section className="popCard"><h2>説明</h2><p>{club.description}</p></section>}
+      <section className="popCard">
+        <h2>参加条件</h2>
+        <div className="popChips">
+          <span className={club.is_paid?"hot":"ok"}>{club.is_paid?"有料":"無料"}</span>
+          <span className={club.minors_ok?"ok":""}>{club.minors_ok?"未成年OK":"大人のみ"}</span>
+        </div>
+      </section>
+      {!joined&&<button className="popBtn" onClick={()=>setNotice("「参加したい」は、もうすぐ使えるようになります。")}>参加したい</button>}
+      {notice&&<p className="popNotice" role="status">{notice}</p>}
+
+      <h2 className="popSecHead">連絡・参加の方法</h2>
+      {contacts.length?contacts.map((c,i)=>{
+        const href=contactHref(c.url);
+        const body=<>{c.label||c.url}{c.note&&<small>{c.note}</small>}</>;
+        return href
+          ? <a key={i} className="popLink" href={href} target="_blank" rel="noopener noreferrer">{body}</a>
+          : <div key={i} className="popLink static">{body}</div>;
+      }):<div className="popLink static">準備中<small>連絡方法はまだ登録されていません</small></div>}
+
+      <h2 className="popSecHead">参加メンバー（{members.length}人）</h2>
+      {members.length
+        ? <div className="popMembers" aria-label="参加メンバー（横にスワイプ）" tabIndex={0}>
+            {members.map(m=><button key={m.member_id} className="popMember" onClick={()=>openDetail({kind:"person",item:m.person})}>
+              {m.person.avatar
+                ? <img src={m.person.avatar} alt=""/>
+                : <i style={{background:AVATAR_COLORS[hashOf(m.member_id)%AVATAR_COLORS.length]}} aria-hidden="true">{(m.person.name||"?").slice(0,1)}</i>}
+              <span>{m.person.name}</span>
+              {m.person.minor&&<MinorBadge/>}
+            </button>)}
+          </div>
+        : <p className="popEmpty">まだメンバーはいません。</p>}
+      <p className="popUpdated">最終更新 {formatDay(club.updated_at)}</p>
+    </div>
   </div>;
 }
 
@@ -526,8 +556,4 @@ function DetailHeader({onBack}){
 
 function DetailBlock({title,children}){
   return <section className="detailBlock"><h2>{title}</h2>{children}</section>;
-}
-
-function Fact({label,value}){
-  return <div className="fact"><small>{label}</small><b>{value}</b></div>;
 }

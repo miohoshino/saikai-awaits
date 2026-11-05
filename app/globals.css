@@ -216,3 +216,49 @@ body{background:#edf2f5}
 /* Minor mark (SPEC 5) */
 .minorBadge{display:inline-block;vertical-align:middle;margin-left:6px;padding:2px 7px;border-radius:999px;background:#ffcf2e;color:#0d2b4e;font-size:10px;font-weight:900;letter-spacing:0;line-height:1.5;white-space:nowrap}
 .personDetailHero h1 .minorBadge{font-size:12px;padding:3px 9px}
+
+/* Club covers (photo, or a pop pattern when there is no photo) */
+.clubCover{position:relative;overflow:hidden;background-size:cover;background-position:center}
+.clubCover svg{position:absolute;inset:0;width:100%;height:100%}
+.cardCover{height:62px;border-radius:9px}
+
+/* Pop page (club page; new design, docs/mockups/redesign-v1.html) */
+.popPage{--sky:#cdeffd;--ink:#0d2b4e;--pink:#ff4f9a;--sun:#ffcf2e;--leaf:#1fb57a;--muted:#5d7690;position:relative;min-height:100%;background:var(--sky);color:var(--ink);padding:0 18px 32px;overflow:hidden}
+.popPage .confetti{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+.popTopBar{position:relative;display:flex;padding:14px 0 6px}
+.popTopBar button{width:40px;height:40px;border:0;border-radius:50%;background:#fff;color:var(--ink);font-size:24px;font-weight:900;line-height:1;cursor:pointer;box-shadow:0 3px 0 rgba(13,43,78,.08)}
+.popStack{position:relative;display:grid;gap:14px}
+.popCover{height:170px;border-radius:24px}
+.popName{font-family:var(--font-dela),var(--font-zen-maru),sans-serif;font-weight:400;font-size:26px;line-height:1.25;text-align:center;margin:2px 0 0;text-wrap:balance}
+.popStats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.popStats div{background:#fff;border-radius:18px;padding:10px 6px;text-align:center;display:grid}
+.popStats small{font-size:11px;color:var(--muted);font-weight:700}
+.popStats b{font-size:15px;font-weight:900;font-variant-numeric:tabular-nums}
+.popStats .you b{color:var(--pink)}
+.popCard{background:#fff;border-radius:22px;padding:14px 16px;display:grid;gap:6px;box-shadow:0 4px 0 rgba(13,43,78,.08)}
+.popCard h2{margin:0;font-size:13px;font-weight:900;color:var(--pink)}
+.popCard p{margin:0;font-size:14px;line-height:1.7;white-space:pre-wrap}
+.popRows{display:grid;gap:4px;font-size:13px;margin:0}
+.popRows div{display:grid;grid-template-columns:5.5em 1fr}
+.popRows dt{color:var(--muted);font-weight:700}
+.popRows dd{margin:0;font-weight:700}
+.popChips{display:flex;flex-wrap:wrap;gap:6px}
+.popChips span{background:#eef6fb;border-radius:999px;padding:4px 10px;font-size:12px;font-weight:700}
+.popChips .ok{background:var(--leaf);color:#fff}
+.popChips .hot{background:var(--sun)}
+.popBtn{font:inherit;font-weight:900;font-size:16px;border:0;border-radius:999px;padding:15px;background:var(--pink);color:#fff;cursor:pointer;width:100%}
+.popBtn:focus-visible,.popLink:focus-visible,.popTopBar button:focus-visible,.popMember:focus-visible{outline:3px solid var(--sun);outline-offset:2px}
+.popNotice{margin:-4px 0 0;text-align:center;font-size:13px;font-weight:700}
+.popSecHead{font-weight:900;font-size:14px;margin:6px 4px -6px}
+.popLink{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;background:#fff;border-radius:18px;padding:15px;font-weight:900;font-size:15px;color:var(--ink);text-decoration:none;text-align:center;box-shadow:0 4px 0 rgba(13,43,78,.08)}
+.popLink small{font-weight:500;font-size:12px;color:var(--muted)}
+.popLink.static{cursor:default}
+.popMembers{display:flex;gap:12px;overflow-x:auto;padding:4px 2px 8px;scroll-snap-type:x mandatory}
+.popMember{flex:0 0 auto;display:grid;justify-items:center;gap:4px;scroll-snap-align:start;width:62px;border:0;background:none;padding:0;font:inherit;font-size:11px;font-weight:700;color:var(--ink);text-align:center;cursor:pointer}
+.popMember i,.popMember img{width:54px;height:54px;border-radius:50%;border:3px solid #fff;object-fit:cover}
+.popMember i{display:grid;place-items:center;font-style:normal;font-family:var(--font-dela),sans-serif;font-size:20px}
+.popMember span{max-width:62px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.popMember .minorBadge{margin:0;font-size:9px;padding:1px 6px}
+.popEmpty{margin:0;text-align:center;font-size:13px;color:var(--muted)}
+.popUpdated{text-align:center;font-size:11px;color:var(--muted);margin:0}
+@media (prefers-reduced-motion:no-preference){.popBtn,.popLink{transition:transform .15s}.popBtn:hover,.popLink:hover{transform:translateY(-2px)}}
