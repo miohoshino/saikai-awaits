@@ -19,6 +19,7 @@ const TOP_IMAGES={
 };
 
 const PEOPLE_CATEGORIES=["AI","釣り","音楽","芸術","地域のお店"];
+const CLUB_IMAGE_BUCKET="club-images";
 const CLUB_COLUMNS="id,name,activity,description,district,venue,frequency,contacts,is_paid,minors_ok,image_url,updated_at,created_at";
 
 function normTag(t=""){return t.normalize("NFKC").trim().toLowerCase();}
@@ -100,8 +101,18 @@ export default function Page(){
       supabase.from("clubs").select(CLUB_COLUMNS).order("updated_at",{ascending:false}),
       supabase.from("club_members").select("club_id,member_id,is_admin,created_at").order("created_at",{ascending:true})
     ]);
-    if(c.error||m.error){setMessage("クラブを読み込めませんでした。");return;}
-    setClubs(c.data||[]); setClubMembers(m.data||[]);
+    if(c.error||m.error){setMessage("クラブを読み込めませんでした。");return null;}
+    // Photos live in a members-only bucket; show them through short-lived signed links.
+    const list=c.data||[];
+    const paths=list.map(x=>x.image_url).filter(u=>u&&!/^https?:\/\//i.test(u));
+    const signed={};
+    if(paths.length){
+      const {data}=await supabase.storage.from(CLUB_IMAGE_BUCKET).createSignedUrls(paths,60*60*6);
+      for(const row of data||[]) if(row.signedUrl) signed[row.path]=row.signedUrl;
+    }
+    const withImages=list.map(x=>({...x,imageSrc:/^https?:\/\//i.test(x.image_url||"")?x.image_url:(signed[x.image_url]||"")}));
+    setClubs(withImages); setClubMembers(m.data||[]);
+    return withImages;
   }
 
   async function loadProfile(uid){
@@ -164,7 +175,9 @@ export default function Page(){
   const membersOf=clubId=>clubMembers.filter(m=>m.club_id===clubId&&peopleById[m.member_id]).map(m=>({...m,person:peopleById[m.member_id]}));
   const isMemberOf=clubId=>clubMembers.some(m=>m.club_id===clubId&&m.member_id===userId);
 
-  const ctx={clubs,clubMembers,membersOf,isMemberOf,userId,openDetail:setDetail,go};
+  const canEditClub=clubId=>profile?.role==="admin"||clubMembers.some(m=>m.club_id===clubId&&m.member_id===userId&&m.is_admin);
+
+  const ctx={clubs,clubMembers,membersOf,isMemberOf,canEditClub,userId,profile,reloadClubs:loadClubs,openDetail:setDetail,go};
 
   if(!supabaseConfigured){
     return <main className="gate">
@@ -205,7 +218,7 @@ export default function Page(){
   return <main className="appStage">
     <section className="app">
       {adminOpen ? <Admin onBack={()=>setAdminOpen(false)} onChanged={loadClubs}/>
-      : detail ? <DetailView key={detail.item?.id} detail={detail} onBack={()=>setDetail(null)} ctx={ctx}/>
+      : detail ? <DetailView key={(detail.kind||"")+(detail.item?.id||"")} detail={detail} onBack={()=>setDetail(null)} ctx={ctx}/>
       : <>
         {tab==="home"&&<Home ctx={ctx} profile={profile} others={others}/>}
         {tab==="people"&&<People ctx={ctx} others={others}/>}
@@ -361,6 +374,7 @@ function Community({ctx}){
   const {clubs,membersOf,openDetail}=ctx;
 
   return <PageShell hero={{image:TOP_IMAGES.community,kicker:"CLUB",title:"クラブ",lead:"好きなことから、つながる。"}}>
+    <button className="createClubBtn" onClick={()=>openDetail({kind:"clubForm",item:null})}>＋ クラブをつくる</button>
     {!clubs.length?<p className="emptyNote">まだ登録がありません。</p>:
     <div className="communityCards">{clubs.map(x=><article className="clickable" key={x.id} onClick={()=>openDetail({kind:"club",item:x})}>
       <ClubCover club={x} className="commCover"/>
@@ -447,7 +461,7 @@ const AVATAR_COLORS=["#ffcf2e","#ff9ec8","#9fe3c6","#a9d8ff","#ffd99a","#d6c4ff"
 function hashOf(v=""){let h=0;for(const ch of v)h=(h*31+ch.charCodeAt(0))>>>0;return h;}
 
 function ClubCover({club,className}){
-  if(club?.image_url) return <div className={className+" clubCover"} role="img" aria-label={`${club.name}のトップイメージ`} style={{backgroundImage:`url("${club.image_url}")`}}></div>;
+  if(club?.imageSrc) return <div className={className+" clubCover"} role="img" aria-label={`${club.name}のトップイメージ`} style={{backgroundImage:`url("${club.imageSrc}")`}}></div>;
   const p=COVER_PATTERNS[hashOf(club?.id)%COVER_PATTERNS.length];
   return <div className={className+" clubCover"} aria-hidden="true" style={{background:p.bg}}>
     <svg viewBox="0 0 300 150" preserveAspectRatio="xMidYMid slice">
@@ -487,11 +501,12 @@ function DetailView({detail,onBack,ctx}){
     </div>;
   }
 
-  return <ClubPage club={item} onBack={onBack} ctx={ctx}/>;
+  if(kind==="clubForm") return <ClubForm club={item} onBack={item?()=>ctx.openDetail({kind:"club",item}):onBack} ctx={ctx}/>;
+  return <ClubPage club={ctx.clubs.find(c=>c.id===item.id)||item} onBack={onBack} ctx={ctx}/>;
 }
 
 function ClubPage({club,onBack,ctx}){
-  const {membersOf,isMemberOf,openDetail}=ctx;
+  const {membersOf,isMemberOf,canEditClub,openDetail}=ctx;
   const [notice,setNotice]=useState("");
   const members=membersOf(club.id);
   const joined=isMemberOf(club.id);
@@ -500,7 +515,9 @@ function ClubPage({club,onBack,ctx}){
 
   return <div className="popPage">
     <Confetti/>
-    <header className="popTopBar"><button onClick={onBack} aria-label="戻る">‹</button></header>
+    <header className="popTopBar"><button onClick={onBack} aria-label="戻る">‹</button>
+      {canEditClub(club.id)&&<button className="popEditBtn" onClick={()=>openDetail({kind:"clubForm",item:club})}>編集する</button>}
+    </header>
     <div className="popStack">
       <ClubCover club={club} className="popCover"/>
       <h1 className="popName">{club.name}</h1>
@@ -547,6 +564,139 @@ function ClubPage({club,onBack,ctx}){
         : <p className="popEmpty">まだメンバーはいません。</p>}
       <p className="popUpdated">最終更新 {formatDay(club.updated_at)}</p>
     </div>
+  </div>;
+}
+
+const DISTRICTS=["西彼町","西海町","大島町","崎戸町","大瀬戸町","市外・西海に関わる"];
+const CLUB_ERRORS={
+  invalid_name:"名前を入れてください（80文字まで）。",
+  invalid_activity:"活動内容を入れてください（300文字まで）。",
+  invalid_district:"地区を選んでください。",
+  invalid_contacts:"連絡・参加の方法を1つ以上入れてください（10件まで）。",
+  too_long:"文字数が多すぎる項目があります。",
+  invalid_image:"写真をもう一度選び直してください。",
+  has_minor_members:"未成年のメンバーがいるため、「未成年参加可」を「いいえ」にはできません。",
+  forbidden:"このクラブを編集する権限がありません。"
+};
+const IMAGE_TYPES={"image/jpeg":"jpg","image/png":"png","image/webp":"webp"};
+const MAX_IMAGE_BYTES=5*1024*1024;
+
+function ClubForm({club,onBack,ctx}){
+  const {userId,profile,reloadClubs,openDetail}=ctx;
+  const minor=!!profile?.is_minor;
+  const editing=!!club;
+  const [form,setForm]=useState({
+    name:club?.name||"",activity:club?.activity||"",description:club?.description||"",
+    district:club?.district||"",venue:club?.venue||"",frequency:club?.frequency||"",
+    is_paid:club?Boolean(club.is_paid):null,
+    minors_ok:minor?true:club?Boolean(club.minors_ok):null,
+    image_url:club?.image_url||""
+  });
+  const [contacts,setContacts]=useState(()=>{
+    const list=(Array.isArray(club?.contacts)?club.contacts:[]).map(c=>({label:c.label||"",url:c.url||"",note:c.note||""}));
+    return list.length?list:[{label:"",url:"",note:""}];
+  });
+  const [preview,setPreview]=useState(club?.imageSrc||"");
+  const [uploading,setUploading]=useState(false);
+  const [saving,setSaving]=useState(false);
+  const [error,setError]=useState("");
+
+  const set=(k,v)=>setForm(f=>({...f,[k]:v}));
+  const setContact=(i,k,v)=>setContacts(list=>list.map((c,j)=>j===i?{...c,[k]:v}:c));
+
+  async function pickImage(e){
+    const file=e.target.files?.[0];
+    e.target.value="";
+    if(!file) return;
+    const ext=IMAGE_TYPES[file.type];
+    if(!ext){setError("写真は JPEG・PNG・WebP のどれかにしてください。");return;}
+    if(file.size>MAX_IMAGE_BYTES){setError("写真は5MBまでです。");return;}
+    setUploading(true); setError("");
+    const path=`${userId}/${crypto.randomUUID()}.${ext}`;
+    const {error:upErr}=await supabase.storage.from(CLUB_IMAGE_BUCKET).upload(path,file,{contentType:file.type});
+    setUploading(false);
+    if(upErr){setError("写真をアップロードできませんでした。");return;}
+    set("image_url",path);
+    setPreview(URL.createObjectURL(file));
+  }
+
+  async function submit(e){
+    e.preventDefault();
+    if(form.is_paid===null){setError("有料かどうかを選んでください。");return;}
+    if(form.minors_ok===null){setError("未成年が参加できるかを選んでください。");return;}
+    setSaving(true); setError("");
+    const payload={...form,contacts:contacts.filter(c=>c.label.trim()||c.url.trim()||c.note.trim())};
+    const {data,error:rpcErr}=editing
+      ? await supabase.rpc("update_club",{p_id:club.id,p:payload})
+      : await supabase.rpc("create_club",{p:payload});
+    if(rpcErr){
+      setSaving(false);
+      const code=Object.keys(CLUB_ERRORS).find(k=>rpcErr.message?.includes(k));
+      setError(code?CLUB_ERRORS[code]:"保存できませんでした。時間をおいてもう一度お試しください。");
+      return;
+    }
+    const fresh=await reloadClubs();
+    setSaving(false);
+    openDetail({kind:"club",item:fresh?.find(c=>c.id===data.id)||data});
+  }
+
+  const YesNo=({value,onChange,yes,no,disabled})=><div className="popToggle" role="radiogroup">
+    <button type="button" role="radio" aria-checked={value===true} className={value===true?"on":""} disabled={disabled} onClick={()=>onChange(true)}>{yes}</button>
+    <button type="button" role="radio" aria-checked={value===false} className={value===false?"on":""} disabled={disabled} onClick={()=>onChange(false)}>{no}</button>
+  </div>;
+
+  return <div className="popPage">
+    <Confetti/>
+    <header className="popTopBar"><button onClick={onBack} aria-label="戻る">‹</button></header>
+    <form className="popStack popForm" onSubmit={submit}>
+      <h1 className="popName">{editing?"クラブを編集":"クラブをつくる"}</h1>
+      <p className="popNote">登録内容は運営が確認します。不適切な内容は削除される場合があります。</p>
+
+      <section className="popCard">
+        <h2>トップ写真<small>任意</small></h2>
+        {preview
+          ? <div className="popCover clubCover" style={{backgroundImage:`url("${preview}")`}} role="img" aria-label="選んだ写真"></div>
+          : <ClubCover club={{id:club?.id||"new",name:form.name}} className="popCover"/>}
+        <div className="popRowBtns">
+          <label className="popSmallBtn">{uploading?"アップロード中…":preview?"写真を変える":"写真を選ぶ"}<input type="file" accept="image/jpeg,image/png,image/webp" onChange={pickImage} disabled={uploading} hidden/></label>
+          {preview&&<button type="button" className="popSmallBtn ghost" onClick={()=>{set("image_url","");setPreview("");}}>写真を外す</button>}
+        </div>
+        <span className="popHint">JPEG・PNG・WebP、5MBまで。写真がないときは絵柄が出ます。</span>
+      </section>
+
+      <section className="popCard">
+        <label className="popField">名前<input required maxLength={80} value={form.name} onChange={e=>set("name",e.target.value)} placeholder="西海フィッシングCLUB"/></label>
+        <label className="popField">活動内容<textarea required rows="2" maxLength={300} value={form.activity} onChange={e=>set("activity",e.target.value)} placeholder="海釣り・さばき方教室"/></label>
+        <label className="popField">地区<select required value={form.district} onChange={e=>set("district",e.target.value)}><option value="">選んでください</option>{DISTRICTS.map(d=><option key={d}>{d}</option>)}</select></label>
+        <label className="popField">活動場所<small>任意</small><input maxLength={120} value={form.venue} onChange={e=>set("venue",e.target.value)} placeholder="大島港 東岸壁"/></label>
+        <label className="popField">頻度<small>任意</small><input maxLength={80} value={form.frequency} onChange={e=>set("frequency",e.target.value)} placeholder="毎週土曜の朝"/></label>
+        <label className="popField">説明<small>任意</small><textarea rows="4" maxLength={1000} value={form.description} onChange={e=>set("description",e.target.value)}/></label>
+      </section>
+
+      <section className="popCard">
+        <h2>参加条件</h2>
+        <div className="popField">有料かどうか<YesNo value={form.is_paid} onChange={v=>set("is_paid",v)} yes="有料" no="無料"/></div>
+        <div className="popField">未成年の参加<YesNo value={form.minors_ok} onChange={v=>set("minors_ok",v)} yes="参加できる" no="大人のみ" disabled={minor}/>
+          {minor&&<span className="popHint">未成年の人が管理するクラブは「参加できる」になります。</span>}</div>
+      </section>
+
+      <section className="popCard">
+        <h2>連絡・参加の方法</h2>
+        {minor
+          ? <p className="popWarn">個人のLINEや電話番号は入れず、クラブ用のアカウントを入れてください。</p>
+          : <span className="popHint">クラブ用のLINE・Instagram などを入れてください。リンクがなくても「直接来てOK」などの文だけでも大丈夫です。</span>}
+        {contacts.map((c,i)=><div className="popContact" key={i}>
+          <input aria-label={`連絡方法${i+1}の名前`} maxLength={60} value={c.label} onChange={e=>setContact(i,"label",e.target.value)} placeholder="名前（例：LINEオープンチャット）"/>
+          <input aria-label={`連絡方法${i+1}のリンクまたは電話番号`} maxLength={300} value={c.url} onChange={e=>setContact(i,"url",e.target.value)} placeholder="https://… または tel:0959…"/>
+          <input aria-label={`連絡方法${i+1}のひとこと`} maxLength={120} value={c.note} onChange={e=>setContact(i,"note",e.target.value)} placeholder="ひとこと（例：土曜6時 大島港）"/>
+          {contacts.length>1&&<button type="button" className="popSmallBtn ghost" onClick={()=>setContacts(list=>list.filter((_,j)=>j!==i))}>この連絡方法を消す</button>}
+        </div>)}
+        {contacts.length<10&&<button type="button" className="popSmallBtn" onClick={()=>setContacts(list=>[...list,{label:"",url:"",note:""}])}>＋ 追加</button>}
+      </section>
+
+      {error&&<p className="popWarn" role="alert">{error}</p>}
+      <button className="popBtn" disabled={saving||uploading}>{saving?"保存中…":editing?"保存する":"公開する"}</button>
+    </form>
   </div>;
 }
 
