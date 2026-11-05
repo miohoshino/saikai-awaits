@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase, supabaseConfigured } from "../lib/supabase";
 import Admin from "./Admin";
 
@@ -172,12 +172,24 @@ export default function Page(){
 
   const peopleById=useMemo(()=>Object.fromEntries(directory.map(x=>[x.id,toPerson(x)])),[directory]);
   // Members shown for a club: only profiles the viewer can see (visible, with a name).
-  const membersOf=clubId=>clubMembers.filter(m=>m.club_id===clubId&&peopleById[m.member_id]).map(m=>({...m,person:peopleById[m.member_id]}));
+  const membersOf=clubId=>clubMembers.filter(m=>m.club_id===clubId&&peopleById[m.member_id]).map(m=>({...m,person:peopleById[m.member_id]})).sort((a,b)=>Number(b.is_admin)-Number(a.is_admin));
   const isMemberOf=clubId=>clubMembers.some(m=>m.club_id===clubId&&m.member_id===userId);
 
   const canEditClub=clubId=>profile?.role==="admin"||clubMembers.some(m=>m.club_id===clubId&&m.member_id===userId&&m.is_admin);
 
-  const ctx={clubs,clubMembers,membersOf,isMemberOf,canEditClub,userId,profile,reloadClubs:loadClubs,openDetail:setDetail,go};
+  async function joinClub(clubId){
+    const {error}=await supabase.rpc("join_club",{p_club:clubId});
+    if(error) return error.message?.includes("adults_only")?"このクラブは大人のみです。":"所属できませんでした。時間をおいてもう一度お試しください。";
+    await loadClubs(); return "";
+  }
+
+  async function leaveClub(clubId){
+    const {error}=await supabase.rpc("leave_club",{p_club:clubId});
+    if(error) return "やめられませんでした。時間をおいてもう一度お試しください。";
+    await loadClubs(); return "";
+  }
+
+  const ctx={clubs,clubMembers,membersOf,isMemberOf,canEditClub,joinClub,leaveClub,userId,profile,reloadClubs:loadClubs,openDetail:setDetail,go};
 
   if(!supabaseConfigured){
     return <main className="gate">
@@ -506,8 +518,32 @@ function DetailView({detail,onBack,ctx}){
 }
 
 function ClubPage({club,onBack,ctx}){
-  const {membersOf,isMemberOf,canEditClub,openDetail}=ctx;
-  const [notice,setNotice]=useState("");
+  const {clubMembers,membersOf,isMemberOf,canEditClub,joinClub,leaveClub,userId,profile,openDetail}=ctx;
+  const [notice,setNotice]=useState(false);
+  const [busy,setBusy]=useState(false);
+  const [error,setError]=useState("");
+  const contactRef=useRef(null);
+  const adultsOnlyForMe=!!profile?.is_minor&&!club.minors_ok;
+  const lastAdmin=clubMembers.filter(m=>m.club_id===club.id&&m.is_admin).every(m=>m.member_id===userId)
+    &&clubMembers.some(m=>m.club_id===club.id&&m.is_admin&&m.member_id===userId);
+
+  function wantToJoin(){
+    setNotice(true);
+    contactRef.current?.scrollIntoView({behavior:"smooth",block:"start"});
+  }
+
+  async function join(){
+    if(!window.confirm("所属すると、このクラブのメンバー欄とあなたのプロフィールに表示されます（隠せません）。所属しますか？")) return;
+    setBusy(true); setError(await joinClub(club.id)); setBusy(false);
+  }
+
+  async function leave(){
+    const msg=lastAdmin
+      ? "あなたがやめると、このクラブの管理者がいなくなります。運営が代わりに管理します。所属をやめますか？"
+      : "このクラブの所属をやめますか？";
+    if(!window.confirm(msg)) return;
+    setBusy(true); setError(await leaveClub(club.id)); setBusy(false);
+  }
   const members=membersOf(club.id);
   const joined=isMemberOf(club.id);
   const contacts=(Array.isArray(club.contacts)?club.contacts:[]).filter(c=>c&&(c.label||c.url||c.note));
@@ -524,7 +560,7 @@ function ClubPage({club,onBack,ctx}){
       <div className="popStats">
         <div><small>メンバー</small><b>{members.length}人</b></div>
         <div><small>エリア</small><b>{club.district||"未設定"}</b></div>
-        <div className="you"><small>あなた</small><b>{joined?"参加中":"未参加"}</b></div>
+        <div className="you"><small>あなた</small><b>{joined?"所属中":"未所属"}</b></div>
       </div>
       {about.length>0&&<section className="popCard">
         <h2>コミュニティについて</h2>
@@ -538,10 +574,10 @@ function ClubPage({club,onBack,ctx}){
           <span className={club.minors_ok?"ok":""}>{club.minors_ok?"未成年OK":"大人のみ"}</span>
         </div>
       </section>
-      {!joined&&<button className="popBtn" onClick={()=>setNotice("「参加したい」は、もうすぐ使えるようになります。")}>参加したい</button>}
-      {notice&&<p className="popNotice" role="status">{notice}</p>}
+      {!joined&&<button className="popBtn" onClick={wantToJoin}>参加したい</button>}
 
-      <h2 className="popSecHead">連絡・参加の方法</h2>
+      <h2 className="popSecHead popAnchor" ref={contactRef}>連絡・参加の方法</h2>
+      {notice&&<p className="popCheer" role="status">まずは連絡してみましょう！</p>}
       {contacts.length?contacts.map((c,i)=>{
         const href=contactHref(c.url);
         const body=<>{c.label||c.url}{c.note&&<small>{c.note}</small>}</>;
@@ -550,6 +586,14 @@ function ClubPage({club,onBack,ctx}){
           : <div key={i} className="popLink static">{body}</div>;
       }):<div className="popLink static">準備中<small>連絡方法はまだ登録されていません</small></div>}
 
+      <div className="popJoinRow">
+        {joined
+          ? <button className="popSmallBtn ghost" disabled={busy} onClick={leave}>所属をやめる</button>
+          : adultsOnlyForMe
+            ? <span className="popHint">このクラブは大人のみです。</span>
+            : <button className="popSmallBtn" disabled={busy} onClick={join}>このクラブに所属する</button>}
+      </div>
+      {error&&<p className="popWarn" role="alert">{error}</p>}
       <h2 className="popSecHead">参加メンバー（{members.length}人）</h2>
       {members.length
         ? <div className="popMembers" aria-label="参加メンバー（横にスワイプ）" tabIndex={0}>
@@ -558,6 +602,7 @@ function ClubPage({club,onBack,ctx}){
                 ? <img src={m.person.avatar} alt=""/>
                 : <i style={{background:AVATAR_COLORS[hashOf(m.member_id)%AVATAR_COLORS.length]}} aria-hidden="true">{(m.person.name||"?").slice(0,1)}</i>}
               <span>{m.person.name}</span>
+              {m.is_admin&&<span className="adminBadge">管理者</span>}
               {m.person.minor&&<MinorBadge/>}
             </button>)}
           </div>

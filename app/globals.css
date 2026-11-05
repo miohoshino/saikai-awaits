@@ -286,3 +286,10 @@ body{background:#edf2f5}
 .popSmallBtn{display:inline-block;font:inherit;font-size:12px;font-weight:900;border:0;border-radius:999px;padding:8px 14px;background:var(--ink);color:#fff;cursor:pointer;justify-self:start}
 .popSmallBtn.ghost{background:#fff;color:var(--ink);border:2px solid #d8e7f0}
 .popBtn:disabled{opacity:.6;cursor:default}
+
+/* Join / leave and admin mark (step 8) */
+.popAnchor{scroll-margin-top:16px}
+.popCheer{margin:-2px 0 0;background:var(--sun);border-radius:18px;padding:12px 14px;text-align:center;font-weight:900;font-size:15px}
+.popJoinRow{display:flex;justify-content:center;margin-top:4px}
+.popJoinRow .popSmallBtn{justify-self:center;padding:10px 18px;font-size:13px}
+.popMember .adminBadge{display:inline-block;background:var(--pink);color:#fff;border-radius:999px;padding:1px 6px;font-size:9px;font-weight:900;line-height:1.5;max-width:none}
