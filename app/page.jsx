@@ -23,7 +23,8 @@ const CLUB_IMAGE_BUCKET="club-images";
 const CLUB_COLUMNS="id,name,activity,description,district,venue,frequency,contacts,is_paid,minors_ok,image_url,updated_at,created_at";
 
 function normTag(t=""){return t.normalize("NFKC").trim().toLowerCase();}
-function splitList(v=""){return v.split(/[,、]/).map(x=>x.trim()).filter(Boolean).slice(0,8);}
+const MAX_TAGS=20;
+function splitList(v="",max=8){return v.split(/[,、，]/).map(x=>x.trim()).filter(Boolean).slice(0,max);}
 function uniqueTags(list){const seen=new Set();return list.filter(t=>{const k=normTag(t);if(!k||seen.has(k))return false;seen.add(k);return true;});}
 
 function formatDay(v){
@@ -33,12 +34,11 @@ function formatDay(v){
 }
 
 function toPerson(x){
-  const allTags=uniqueTags([...(x.tags||[]),...(x.skills||[])]);
+  const allTags=uniqueTags(x.tags||[]);
   return {
     id:x.id,
     name:x.name,
     area:x.area,
-    role:x.organization||"SAIKAI AWAITS メンバー",
     bio:x.bio||"",
     tags:allTags.slice(0,6),
     rawTags:allTags,
@@ -122,7 +122,7 @@ export default function Page(){
   }
 
   async function loadDirectory(){
-    const {data}=await supabase.from("members").select("id,name,area,organization,bio,tags,skills,avatar_url,is_minor").eq("visible",true).neq("name","").order("updated_at",{ascending:false});
+    const {data}=await supabase.from("members").select("id,name,area,bio,tags,avatar_url,is_minor").eq("visible",true).neq("name","").order("updated_at",{ascending:false});
     setDirectory(data||[]);
   }
 
@@ -130,10 +130,8 @@ export default function Page(){
     const {data,error}=await supabase.from("members").update({
       name:payload.name.trim(),
       area:payload.area,
-      organization:payload.organization||"",
       bio:payload.bio||"",
-      tags:(payload.tags||[]).slice(0,8),
-      skills:(payload.skills||[]).slice(0,8)
+      tags:uniqueTags(payload.tags||[]).slice(0,MAX_TAGS)
     }).eq("id",userId).select().single();
     if(error){setMessage("プロフィールを保存できませんでした。");return false;}
     setProfile(data); await loadDirectory(); setMessage(""); return true;
@@ -303,7 +301,7 @@ function Chips({options,value,onChange,label}){
 
 function Home({ctx,profile,others}){
   const {clubs,clubMembers,membersOf,isMemberOf,openDetail,go,userId}=ctx;
-  const myTags=[...(profile?.tags||[]),...(profile?.skills||[])].map(normTag);
+  const myTags=(profile?.tags||[]).map(normTag);
   const shared=p=>p.rawTags.filter(t=>myTags.includes(normTag(t))).length;
   const person=[...others].sort((a,b)=>shared(b)-shared(a))[0];
   const myDistrict=profile?.area||"";
@@ -384,7 +382,7 @@ function People({ctx,others}){
   const {openDetail}=ctx;
   const [q,setQ]=useState("");
   const [category,setCategory]=useState("all");
-  const matched=others.filter(x=>[x.name,x.area,x.role,x.bio,...x.rawTags].join(" ").toLowerCase().includes(q.toLowerCase()));
+  const matched=others.filter(x=>[x.name,x.area,x.bio,...x.rawTags].join(" ").toLowerCase().includes(q.toLowerCase()));
   const groups=[...PEOPLE_CATEGORIES,"その他"].map(c=>[c,matched.filter(p=>personCategories(p).includes(c))]);
   const visible=category==="all"?groups.filter(([,list])=>list.length):groups.filter(([c])=>c===category);
 
@@ -403,7 +401,7 @@ function People({ctx,others}){
 function PersonRow({person:p,openDetail}){
   return <article className="personRow clickable" onClick={()=>openDetail({kind:"person",item:p})}>
     <Avatar person={p}/>
-    <div><h3>{p.name}{p.minor&&<MinorBadge/>}</h3><small>{p.area} · {p.role}</small><p>{p.bio}</p><div className="tags">{p.tags.map(t=><span key={t}>{t}</span>)}</div></div>
+    <div><h3>{p.name}{p.minor&&<MinorBadge/>}</h3><small>{p.area}</small><p>{p.bio}</p><div className="tags">{p.tags.map(t=><span key={t}>{t}</span>)}</div></div>
   </article>;
 }
 
@@ -475,9 +473,9 @@ function Me({ctx,logout,openAdmin,profile,saveProfile,message}){
       : <div className="profileCard">
           <Avatar person={person} size={76}/>
           <h3>{profile?.name||"メンバー"}{profile?.is_minor&&<MinorBadge/>}</h3>
-          <p>{profile?.area||"西海市"}{profile?.organization?" · "+profile.organization:""}</p>
+          <p>{profile?.area||"地区未設定"}</p>
           {profile?.bio&&<p className="profileBio">{profile.bio}</p>}
-          <div className="tags profileTags">{uniqueTags([...(profile?.tags||[]),...(profile?.skills||[])]).slice(0,8).map(t=><span key={t}>{t}</span>)}</div>
+          <div className="tags profileTags">{uniqueTags(profile?.tags||[]).map(t=><span key={t}>{t}</span>)}</div>
           <button className="secondaryCta" onClick={()=>setEditing(true)}>プロフィールを編集</button>
         </div>}
 
@@ -492,23 +490,21 @@ function Me({ctx,logout,openAdmin,profile,saveProfile,message}){
 
 function ProfileForm({initial,minor,saveProfile,submitLabel,onSaved}){
   const [form,setForm]=useState({
-    name:initial?.name||"",area:initial?.area||"",organization:initial?.organization||"",bio:initial?.bio||"",
-    tags:(initial?.tags||[]).join(", "),skills:(initial?.skills||[]).join(", ")
+    name:initial?.name||"",area:initial?.area||"",bio:initial?.bio||"",
+    tags:(initial?.tags||[]).join(", ")
   });
   const [saving,setSaving]=useState(false);
   async function submit(e){
     e.preventDefault(); setSaving(true);
-    const ok=await saveProfile({...form,tags:splitList(form.tags),skills:splitList(form.skills)});
+    const ok=await saveProfile({...form,tags:splitList(form.tags,MAX_TAGS)});
     setSaving(false);
     if(ok) onSaved?.();
   }
   return <form className="profileForm" onSubmit={submit}>
     <label>{minor?"ニックネーム":"名前"}<input required maxLength={80} value={form.name} onChange={e=>setForm({...form,name:e.target.value})}/>{minor&&<span className="formHint">本名ではなく、ニックネームを入れてください。</span>}</label>
-    <label>西海との関係<select required value={form.area} onChange={e=>setForm({...form,area:e.target.value})}><option value="">選択してください</option><option>西彼町</option><option>西海町</option><option>大島町</option><option>崎戸町</option><option>大瀬戸町</option><option>市外・西海に関わる</option></select></label>
-    <label>所属<input maxLength={120} value={form.organization} onChange={e=>setForm({...form,organization:e.target.value})}/></label>
+    <label>住んでいる地区<select required value={form.area} onChange={e=>setForm({...form,area:e.target.value})}><option value="">選択してください</option><option>西彼町</option><option>西海町</option><option>大島町</option><option>崎戸町</option><option>大瀬戸町</option><option>市外・西海に関わる</option></select></label>
     <label>自己紹介<textarea rows="4" maxLength={500} value={form.bio} onChange={e=>setForm({...form,bio:e.target.value})}/></label>
-    <label>興味（カンマ区切り）<input value={form.tags} onChange={e=>setForm({...form,tags:e.target.value})} placeholder="釣り, AI, 音楽"/></label>
-    <label>できること（カンマ区切り）<input value={form.skills} onChange={e=>setForm({...form,skills:e.target.value})} placeholder="動画編集, 営業, デザイン"/></label>
+    <label>属性タグ（カンマ区切り・20個まで）<input value={form.tags} onChange={e=>setForm({...form,tags:e.target.value})} placeholder="釣り, 犬を飼っている, 元野球部"/></label>
     <p className="formHint">「AI」「釣り」「音楽」「芸術」「地域のお店」を入れると、「つながる」のカテゴリーに表示されます。</p>
     <button className="primaryCta fullCta" disabled={saving}>{saving?"保存中…":submitLabel}</button>
   </form>;
@@ -560,12 +556,12 @@ function DetailView({detail,onBack,ctx}){
       <section className="personDetailHero">
         <Avatar person={item} size={110}/>
         <h1>{item.name}{item.minor&&<MinorBadge/>}</h1>
-        <p>{item.area} · {item.role}</p>
+        <p>{item.area}</p>
         <div className="tags detailTags">{(item.tags||[]).map(t=><span key={t}>{t}</span>)}</div>
       </section>
       <section className="detailBody">
         <DetailBlock title="この人について"><p>{item.bio||"まだ自己紹介がありません。"}</p></DetailBlock>
-        <DetailBlock title="興味・できること"><div className="detailChips">{(item.tags||[]).map(t=><span key={t}>{t}</span>)}</div></DetailBlock>
+        <DetailBlock title="属性タグ"><div className="detailChips">{(item.tags||[]).map(t=><span key={t}>{t}</span>)}</div></DetailBlock>
       </section>
     </div>;
   }
