@@ -365,3 +365,27 @@ body{background:#edf2f5}
 .popForm .tagPicker input{border:2px solid #d8e7f0;border-radius:12px}
 .popCommon{color:var(--pink)!important;font-weight:900!important;line-height:1.5}
 .popSecRow{display:flex;justify-content:space-between;align-items:baseline;gap:8px}.popSecRow .popLinkBtn{margin:0}
+
+/* Mind map (step 15) */
+.mapBox{background:linear-gradient(180deg,#a9e2fb,#8fd6f6);border-radius:24px;overflow:hidden;box-shadow:0 4px 0 rgba(13,43,78,.08)}
+.mapBox svg{display:block;width:100%;height:auto;touch-action:manipulation}
+.mapIsland{fill:#fff7d6;stroke:#fff;stroke-width:3}
+.mapIslandLabel{font-size:11px;font-weight:900;fill:#5d7690;text-anchor:middle;pointer-events:none}
+.mapLink{stroke:#0d2b4e;stroke-linecap:round}
+.mapLink.strong{stroke-width:2.5}
+.mapLink.soft{stroke-width:1;opacity:.45}
+.mapNode{cursor:pointer}
+.mapNode text{font-size:9px;font-weight:900;fill:#0d2b4e;text-anchor:middle;paint-order:stroke;stroke:#fff;stroke-width:3px;stroke-linejoin:round;pointer-events:none}
+.mapNode.club rect{fill:#1fb57a;stroke:#fff;stroke-width:2}
+.mapNode.person circle{stroke:#fff;stroke-width:2}
+.mapNode.dim{opacity:.3}
+.mapNode.focus rect,.mapNode.focus circle{stroke:#0d2b4e;stroke-width:3}
+.mapNode:focus-visible{outline:none}
+.mapNode:focus-visible rect,.mapNode:focus-visible circle{stroke:#ffcf2e;stroke-width:4}
+.mapLegend{display:flex;gap:14px;justify-content:center;font-size:11px;font-weight:700;color:var(--muted)}
+.mapLegend span{display:flex;align-items:center;gap:5px}
+.mapLegend i{width:10px;height:10px;border-radius:50%;background:#ffcf2e;border:2px solid #fff}
+.mapLegend i.sq{border-radius:3px;background:#1fb57a}
+.mapLegend i.me{background:#ff4f9a}
+.mapCard b{font-size:16px;font-weight:900}
+.mapCard small{font-size:12px;color:var(--muted);font-weight:700}

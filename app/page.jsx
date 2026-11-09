@@ -461,6 +461,7 @@ function People({ctx,others}){
     <Confetti/>
     <div className="popStack">
       <h1 className="popName">つながる</h1>
+      <button className="popBtn" onClick={()=>openDetail({kind:"map",item:null})}>マップで見る</button>
 
       {common.length>0&&<section className="popCard">
         <h2>あなたとの共通点</h2>
@@ -525,6 +526,119 @@ function Nearby({ctx,onBack}){
       {peopleHits.length
         ? <div className="popList">{peopleHits.map(({p,why})=><PersonButton key={p.id} person={p} openDetail={openDetail} note={why}/>)}</div>
         : <p className="popEmpty">見つかりませんでした。</p>}
+    </div>
+  </div>;
+}
+
+// Mind map (SPEC 4-4). Clubs sit on their district "island", laid out roughly like Saikai's geography;
+// people are placed around the clubs they belong to. The focused node (me by default) shows its links.
+// Client decisions (2026-11-05): minors are shown like adults, without the minor mark on the map.
+const MAP_W=360, MAP_H=470;
+const ISLANDS=[
+  {id:"崎戸町",label:"崎戸町",x:78,y:96,rx:52,ry:40},
+  {id:"西海町",label:"西海町",x:226,y:92,rx:70,ry:50},
+  {id:"大島町",label:"大島町",x:84,y:228,rx:56,ry:46},
+  {id:"西彼町",label:"西彼町",x:286,y:218,rx:58,ry:66},
+  {id:"大瀬戸町",label:"大瀬戸町",x:186,y:346,rx:72,ry:56},
+  {id:"市外・西海に関わる",label:"近隣市町",x:302,y:420,rx:46,ry:32},
+  {id:"",label:"",x:186,y:220,rx:0,ry:0}
+];
+const ISLAND_BY_ID=Object.fromEntries(ISLANDS.map(i=>[i.id,i]));
+
+function spiral(i,base,step){const a=i*2.39996;const r=base+step*Math.sqrt(i);return [Math.cos(a)*r,Math.sin(a)*r];}
+
+function MindMap({ctx,onBack}){
+  const {clubs,clubMembers,others,profile,userId,openDetail}=ctx;
+  const me=useMemo(()=>({...toPerson(profile||{}),id:userId}),[profile,userId]);
+  const people=useMemo(()=>[me,...others],[me,others]);
+  const [focus,setFocus]=useState({kind:"person",id:userId});
+
+  const layout=useMemo(()=>{
+    const pos={};
+    const perIsland={};
+    for(const c of clubs){
+      const isl=ISLAND_BY_ID[c.district]||ISLAND_BY_ID[""];
+      const i=perIsland[isl.id]=(perIsland[isl.id]??-1)+1;
+      const [dx,dy]=spiral(i,i?16:0,14);
+      pos["c:"+c.id]={x:isl.x+dx,y:isl.y+dy};
+    }
+    const loose={};
+    for(const p of people){
+      const mine=clubMembers.filter(m=>m.member_id===p.id).map(m=>pos["c:"+m.club_id]).filter(Boolean);
+      const h=hashOf(p.id||"");
+      if(mine.length){
+        const cx=mine.reduce((s,q)=>s+q.x,0)/mine.length, cy=mine.reduce((s,q)=>s+q.y,0)/mine.length;
+        const a=(h%360)*Math.PI/180, r=22+(h%14);
+        pos["p:"+p.id]={x:cx+Math.cos(a)*r,y:cy+Math.sin(a)*r};
+      }else{
+        // Not in any club yet: near the edge of their home island (or the middle sea).
+        const isl=ISLAND_BY_ID[p.area]||ISLAND_BY_ID[""];
+        const i=loose[isl.id]=(loose[isl.id]??-1)+1;
+        const a=i*2.39996+(h%10)/10, r=(isl.rx||30)*.8;
+        pos["p:"+p.id]={x:isl.x+Math.cos(a)*r,y:isl.y+Math.sin(a)*(isl.ry||30)*.8};
+      }
+    }
+    for(const k in pos){pos[k].x=Math.min(MAP_W-10,Math.max(10,pos[k].x));pos[k].y=Math.min(MAP_H-10,Math.max(10,pos[k].y));}
+    return pos;
+  },[clubs,clubMembers,people]);
+
+  // Links around the focused node: strong = direct, soft = one step further.
+  const {strong,soft,lit}=useMemo(()=>{
+    const strong=[],soft=[],lit=new Set();
+    const key=(focus.kind==="club"?"c:":"p:")+focus.id;
+    lit.add(key);
+    const clubIds=focus.kind==="club"?[focus.id]:clubMembers.filter(m=>m.member_id===focus.id).map(m=>m.club_id);
+    for(const cid of clubIds){
+      const ck="c:"+cid; lit.add(ck);
+      if(focus.kind==="person") strong.push([key,ck]);
+      for(const m of clubMembers.filter(x=>x.club_id===cid&&x.member_id!==(focus.kind==="person"?focus.id:null))){
+        const pk="p:"+m.member_id; if(!layout[pk]) continue;
+        lit.add(pk);
+        (focus.kind==="club"?strong:soft).push([ck,pk]);
+      }
+    }
+    return {strong,soft,lit};
+  },[focus,clubMembers,layout]);
+
+  const focusClub=focus.kind==="club"?clubs.find(c=>c.id===focus.id):null;
+  const focusPerson=focus.kind==="person"?people.find(p=>p.id===focus.id):null;
+  const line=([a,b],cls)=>layout[a]&&layout[b]?<line key={cls+a+b} className={cls} x1={layout[a].x} y1={layout[a].y} x2={layout[b].x} y2={layout[b].y}/>:null;
+
+  return <div className="popPage popScreen">
+    <Confetti/>
+    <header className="popTopBar"><button onClick={onBack} aria-label="戻る">‹</button></header>
+    <div className="popStack">
+      <h1 className="popName">マップ</h1>
+      <p className="popNote">印を押すと、そこを中心につながりを表示します。</p>
+      <div className="mapBox">
+        <svg viewBox={`0 0 ${MAP_W} ${MAP_H}`} role="img" aria-label="人とクラブのつながりの地図">
+          {ISLANDS.filter(i=>i.rx).map(i=><g key={i.id}>
+            <ellipse className="mapIsland" cx={i.x} cy={i.y} rx={i.rx} ry={i.ry}/>
+            <text className="mapIslandLabel" x={i.x} y={i.y-i.ry+14}>{i.label}</text>
+          </g>)}
+          {soft.map(l=>line(l,"mapLink soft"))}
+          {strong.map(l=>line(l,"mapLink strong"))}
+          {clubs.map(c=>{const k="c:"+c.id,p=layout[k],on=lit.has(k);return p&&<g key={k} className={"mapNode club"+(on?"":" dim")+(focus.kind==="club"&&focus.id===c.id?" focus":"")} onClick={()=>setFocus({kind:"club",id:c.id})} role="button" tabIndex={0} aria-label={`クラブ ${c.name}`} onKeyDown={e=>{if(e.key==="Enter")setFocus({kind:"club",id:c.id});}}>
+            <rect x={p.x-9} y={p.y-9} width="18" height="18" rx="5"/>
+            {on&&<text x={p.x} y={p.y+21}>{c.name.length>9?c.name.slice(0,9)+"…":c.name}</text>}
+          </g>;})}
+          {people.map(pr=>{const k="p:"+pr.id,p=layout[k],on=lit.has(k),isMe=pr.id===userId;return p&&<g key={k} className={"mapNode person"+(on?"":" dim")+(isMe?" me":"")+(focus.kind==="person"&&focus.id===pr.id?" focus":"")} onClick={()=>setFocus({kind:"person",id:pr.id})} role="button" tabIndex={0} aria-label={isMe?"あなた":pr.name} onKeyDown={e=>{if(e.key==="Enter")setFocus({kind:"person",id:pr.id});}}>
+            <circle cx={p.x} cy={p.y} r={isMe?11:7} style={{fill:isMe?"#ff4f9a":AVATAR_COLORS[hashOf(pr.id||"")%AVATAR_COLORS.length]}}/>
+            {(on||isMe)&&<text x={p.x} y={p.y-(isMe?15:11)}>{isMe?"あなた":pr.name}</text>}
+          </g>;})}
+        </svg>
+      </div>
+      <div className="mapLegend"><span><i className="sq"/>クラブ</span><span><i/>人</span><span><i className="me"/>あなた</span></div>
+
+      <section className="popCard mapCard">
+        {focusClub&&<><h2>クラブ</h2><b>{focusClub.name}</b><small>{focusClub.district||"地区未設定"} · {clubMembers.filter(m=>m.club_id===focusClub.id).length}人</small></>}
+        {focusPerson&&<><h2>{focusPerson.id===userId?"あなた":"人"}</h2><b>{focusPerson.name||"メンバー"}</b><small>所属クラブ {clubMembers.filter(m=>m.member_id===focusPerson.id).length}件</small></>}
+        <div className="popRowBtns">
+          {focusClub&&<button className="popSmallBtn" onClick={()=>openDetail({kind:"club",item:focusClub})}>ページを見る</button>}
+          {focusPerson&&focusPerson.id!==userId&&<button className="popSmallBtn" onClick={()=>openDetail({kind:"person",item:focusPerson})}>ページを見る</button>}
+          {!(focus.kind==="person"&&focus.id===userId)&&<button className="popSmallBtn ghost" onClick={()=>setFocus({kind:"person",id:userId})}>自分に戻る</button>}
+        </div>
+      </section>
     </div>
   </div>;
 }
@@ -751,6 +865,7 @@ function DetailView({detail,onBack,ctx}){
 
   if(kind==="person") return <PersonPage person={item} ctx={ctx} onBack={onBack}/>;
   if(kind==="nearby") return <Nearby ctx={ctx} onBack={onBack}/>;
+  if(kind==="map") return <MindMap ctx={ctx} onBack={onBack}/>;
 
   if(kind==="clubForm") return <ClubForm club={item} onBack={item?()=>ctx.openDetail({kind:"club",item}):onBack} ctx={ctx}/>;
   return <ClubPage club={ctx.clubs.find(c=>c.id===item.id)||item} onBack={onBack} ctx={ctx}/>;
