@@ -94,7 +94,7 @@ export default function Page(){
 
   async function loadClubs(){
     const [c,m]=await Promise.all([
-      supabase.from("clubs").select(CLUB_COLUMNS).order("updated_at",{ascending:false}),
+      supabase.from("clubs").select(CLUB_COLUMNS).eq("hidden",false).order("updated_at",{ascending:false}),
       supabase.from("club_members").select("club_id,member_id,is_admin,created_at").order("created_at",{ascending:true})
     ]);
     if(c.error||m.error){setMessage("クラブを読み込めませんでした。");return null;}
@@ -239,7 +239,7 @@ export default function Page(){
 
   return <main className="appStage">
     <section className="app">
-      {adminOpen ? <Admin onBack={()=>setAdminOpen(false)} onChanged={loadClubs}/>
+      {adminOpen ? <Admin onBack={()=>setAdminOpen(false)} onChanged={()=>Promise.all([loadAll(userId),loadProfile(userId)])} selfId={userId}/>
       : detail ? <DetailView key={(detail.kind||"")+(detail.item?.id||"")} detail={detail} onBack={()=>setDetail(null)} ctx={ctx}/>
       : <>
         {tab==="home"&&<Home ctx={ctx} profile={profile} others={others}/>}

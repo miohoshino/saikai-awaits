@@ -13,37 +13,22 @@ const DETAIL_FIELDS={
 };
 const ADMIN_ENTRY_COLUMNS="id,kind,status,origin,title,summary,body,area,tags,details,image_url,source_name,source_url,community_id,review_note,published_at,created_at,submitter:members!entries_submitted_by_fkey(name)";
 
-const TABS=[["pending","確認待ち"],["published","公開中"],["closed","見送り・終了"],["invites","招待コード"],["members","会員"]];
+// Old news/event review tabs are hidden (out of spec); their data and EntryList code are kept.
+const TABS=[["clubs","クラブ"],["members","会員"],["tags","タグ"],["invites","招待コード"]];
 
-export default function Admin({onBack,onChanged}){
-  const [tab,setTab]=useState("pending");
-  const [counts,setCounts]=useState({});
-
-  async function loadCounts(){
-    const {data}=await supabase.from("entries").select("status");
-    const c={};
-    for(const r of data||[]) c[r.status]=(c[r.status]||0)+1;
-    setCounts(c);
-  }
-  useEffect(()=>{loadCounts();},[]);
-
-  async function changed(){
-    await Promise.all([loadCounts(),onChanged?.()]);
-  }
+export default function Admin({onBack,onChanged,selfId}){
+  const [tab,setTab]=useState("clubs");
 
   return <div className="adminPage">
     <header className="detailHeader adminHeader"><button onClick={onBack} aria-label="戻る">‹</button><b>運営メニュー</b><span></span></header>
     <nav className="adminTabs">
-      {TABS.map(([id,label])=><button key={id} className={tab===id?"active":""} onClick={()=>setTab(id)}>
-        {label}{id==="pending"&&counts.pending?<i>{counts.pending}</i>:null}
-      </button>)}
+      {TABS.map(([id,label])=><button key={id} className={tab===id?"active":""} onClick={()=>setTab(id)}>{label}</button>)}
     </nav>
     <section className="adminBody">
-      {tab==="invites"
-        ? <InviteManager/>
-        : tab==="members"
-        ? <MemberManager onChanged={onChanged}/>
-        : <EntryList key={tab} statuses={tab==="closed"?["rejected","archived"]:[tab]} allowCreate={tab==="published"} onChanged={changed}/>}
+      {tab==="clubs"&&<ClubManager onChanged={onChanged}/>}
+      {tab==="members"&&<MemberManager onChanged={onChanged} selfId={selfId}/>}
+      {tab==="tags"&&<TagManager onChanged={onChanged}/>}
+      {tab==="invites"&&<InviteManager/>}
     </section>
   </div>;
 }
@@ -229,37 +214,176 @@ function InviteManager(){
   </>;
 }
 
-function MemberManager({onChanged}){
-  const [members,setMembers]=useState([]);
+function ClubManager({onChanged}){
+  const [clubs,setClubs]=useState([]);
   const [error,setError]=useState("");
   const [busyId,setBusyId]=useState(null);
 
   async function load(){
-    const {data,error}=await supabase.from("members").select("id,name,area,role,is_minor,created_at").order("created_at",{ascending:false});
-    if(error){setError("会員を読み込めませんでした。");return;}
-    setMembers(data||[]);
+    const [c,m]=await Promise.all([
+      supabase.from("clubs").select("id,name,district,hidden,updated_at").order("updated_at",{ascending:false}),
+      supabase.from("club_members").select("club_id")
+    ]);
+    if(c.error){setError("クラブを読み込めませんでした。");return;}
+    const counts={};
+    for(const x of m.data||[]) counts[x.club_id]=(counts[x.club_id]||0)+1;
+    setClubs((c.data||[]).map(x=>({...x,members:counts[x.id]||0})));
   }
   useEffect(()=>{load();},[]);
 
-  async function toggleMinor(m){
-    const label=m.name||"名前未設定の会員";
-    const msg=m.is_minor?`「${label}」の未成年マークを外しますか？`:`「${label}」に未成年マークを付けますか？`;
-    if(!window.confirm(msg)) return;
-    setBusyId(m.id);
-    const {error}=await supabase.rpc("set_member_minor",{p_member:m.id,p_is_minor:!m.is_minor});
+  async function run(id,fn){
+    setBusyId(id);
+    const {error}=await fn();
     setBusyId(null);
     if(error){setError("更新できませんでした。");return;}
     setError(""); await load(); await onChanged?.();
   }
 
+  function toggleHidden(c){
+    const msg=c.hidden?`「${c.name}」を表示に戻しますか？`:`「${c.name}」を非表示にしますか？運営以外の人には見えなくなります。`;
+    if(!window.confirm(msg)) return;
+    run(c.id,()=>supabase.rpc("admin_set_club_hidden",{p_club:c.id,p_hidden:!c.hidden}));
+  }
+
+  function remove(c){
+    if(!window.confirm(`「${c.name}」を削除しますか？\nクラブと、所属の記録（${c.members}人分）が消えます。`)) return;
+    if(!window.confirm("本当に削除しますか？元には戻せません。")) return;
+    run(c.id,()=>supabase.rpc("admin_delete_club",{p_club:c.id}));
+  }
+
   return <>
     {error&&<div className="inlineMessage">{error}</div>}
-    <div className="adminList">{members.map(m=><article key={m.id} className="inviteRow">
+    {!clubs.length&&<p className="emptyNote">クラブはまだありません。</p>}
+    <div className="adminList">{clubs.map(c=><article key={c.id} className={"inviteRow adminRow"+(c.hidden?" inactive":"")}>
       <div>
-        <b>{m.name||"名前未設定"}{m.is_minor&&<span className="minorBadge">未成年</span>}</b>
-        <small>{m.role==="admin"?"管理者 · ":""}{m.area||"地区未設定"} · {formatDateTime(m.created_at)}登録</small>
+        <b>{c.name}{c.hidden&&<span className="adminStatus">非表示</span>}</b>
+        <small>{c.district||"地区未設定"} · {c.members}人 · {formatDateTime(c.updated_at)}更新</small>
       </div>
-      <button className="secondaryCta" disabled={busyId===m.id} onClick={()=>toggleMinor(m)}>{m.is_minor?"マークを外す":"未成年にする"}</button>
+      <div className="adminActions">
+        <button className="secondaryCta" disabled={busyId===c.id} onClick={()=>toggleHidden(c)}>{c.hidden?"表示に戻す":"非表示にする"}</button>
+        <button className="secondaryCta dangerCta" disabled={busyId===c.id} onClick={()=>remove(c)}>削除</button>
+      </div>
+    </article>)}</div>
+  </>;
+}
+
+function MemberManager({onChanged,selfId}){
+  const [members,setMembers]=useState([]);
+  const [error,setError]=useState("");
+  const [busyId,setBusyId]=useState(null);
+
+  async function load(){
+    const {data,error}=await supabase.from("members").select("id,name,area,role,is_minor,visible,created_at").order("created_at",{ascending:false});
+    if(error){setError("会員を読み込めませんでした。");return;}
+    setMembers(data||[]);
+  }
+  useEffect(()=>{load();},[]);
+
+  async function run(id,fn,failMsg="更新できませんでした。"){
+    setBusyId(id);
+    const {error}=await fn();
+    setBusyId(null);
+    if(error){setError(failMsg);return;}
+    setError(""); await load(); await onChanged?.();
+  }
+
+  const nameOf=m=>m.name||"名前未設定の会員";
+
+  function toggleMinor(m){
+    const msg=m.is_minor?`「${nameOf(m)}」の未成年マークを外しますか？`:`「${nameOf(m)}」に未成年マークを付けますか？\nその人の「よくいる場所」と「連絡先」は消えます。`;
+    if(!window.confirm(msg)) return;
+    run(m.id,()=>supabase.rpc("set_member_minor",{p_member:m.id,p_is_minor:!m.is_minor}));
+  }
+
+  function toggleVisible(m){
+    const msg=m.visible?`「${nameOf(m)}」を非表示にしますか？運営以外の人には見えなくなります。`:`「${nameOf(m)}」を表示に戻しますか？`;
+    if(!window.confirm(msg)) return;
+    run(m.id,()=>supabase.rpc("admin_set_member_visible",{p_member:m.id,p_visible:!m.visible}));
+  }
+
+  function remove(m){
+    if(!window.confirm(`「${nameOf(m)}」を削除しますか？\nアカウント、プロフィール、所属がすべて消え、この人はもう入れなくなります。`)) return;
+    if(!window.confirm("本当に削除しますか？元には戻せません。")) return;
+    run(m.id,()=>supabase.rpc("admin_delete_member",{p_member:m.id}),"削除できませんでした。");
+  }
+
+  return <>
+    {error&&<div className="inlineMessage">{error}</div>}
+    <div className="adminList">{members.map(m=><article key={m.id} className={"inviteRow adminRow"+(m.visible?"":" inactive")}>
+      <div>
+        <b>{m.name||"名前未設定"}{m.is_minor&&<span className="minorBadge">未成年</span>}{!m.visible&&<span className="adminStatus">非表示</span>}</b>
+        <small>{m.role==="admin"?"運営 · ":""}{m.area||"地区未設定"} · {formatDateTime(m.created_at)}登録{m.id===selfId?" · あなた":""}</small>
+      </div>
+      <div className="adminActions">
+        <button className="secondaryCta" disabled={busyId===m.id} onClick={()=>toggleMinor(m)}>{m.is_minor?"マークを外す":"未成年にする"}</button>
+        {m.id!==selfId&&<>
+          <button className="secondaryCta" disabled={busyId===m.id} onClick={()=>toggleVisible(m)}>{m.visible?"非表示にする":"表示に戻す"}</button>
+          <button className="secondaryCta dangerCta" disabled={busyId===m.id} onClick={()=>remove(m)}>削除</button>
+        </>}
+      </div>
+    </article>)}</div>
+  </>;
+}
+
+function TagManager({onChanged}){
+  const [tags,setTags]=useState([]);
+  const [draft,setDraft]=useState("");
+  const [error,setError]=useState("");
+  const [busy,setBusy]=useState(false);
+
+  async function load(){
+    const [t,m]=await Promise.all([
+      supabase.from("tags").select("label,is_official"),
+      supabase.from("members").select("tags")
+    ]);
+    if(t.error){setError("タグを読み込めませんでした。");return;}
+    const uses={};
+    for(const x of m.data||[]) for(const l of x.tags||[]) uses[l]=(uses[l]||0)+1;
+    setTags((t.data||[]).map(x=>({...x,uses:uses[x.label]||0}))
+      .sort((a,b)=>Number(b.is_official)-Number(a.is_official)||b.uses-a.uses||a.label.localeCompare(b.label,"ja")));
+  }
+  useEffect(()=>{load();},[]);
+
+  async function add(e){
+    e.preventDefault();
+    const label=draft.trim();
+    if(!label) return;
+    setBusy(true);
+    const {error}=await supabase.rpc("admin_add_tag",{p_label:label});
+    setBusy(false);
+    if(error){setError("追加できませんでした（40文字まで）。");return;}
+    setError(""); setDraft(""); await load(); await onChanged?.();
+  }
+
+  async function remove(t){
+    const msg=t.uses
+      ? `タグ「${t.label}」を削除しますか？\n付けている${t.uses}人のプロフィールからも外れます。元には戻せません。`
+      : `タグ「${t.label}」を削除しますか？`;
+    if(!window.confirm(msg)) return;
+    setBusy(true);
+    const {error}=await supabase.rpc("admin_delete_tag",{p_label:t.label});
+    setBusy(false);
+    if(error){setError("削除できませんでした。");return;}
+    setError(""); await load(); await onChanged?.();
+  }
+
+  return <>
+    <form className="entryForm" onSubmit={add}>
+      <div className="formTitle"><b>運営のタグを追加</b></div>
+      <div className="adminTagAdd">
+        <input value={draft} maxLength={40} onChange={e=>setDraft(e.target.value)} placeholder="例：元バレー部" aria-label="追加するタグ"/>
+        <button className="primaryCta" disabled={busy||!draft.trim()}>追加</button>
+      </div>
+    </form>
+    {error&&<div className="inlineMessage">{error}</div>}
+    <div className="adminList">{tags.map(t=><article key={t.label} className="inviteRow adminRow">
+      <div>
+        <b>{t.label}{t.is_official&&<span className="adminStatus">運営</span>}</b>
+        <small>{t.uses}人が使用</small>
+      </div>
+      <div className="adminActions">
+        <button className="secondaryCta dangerCta" disabled={busy} onClick={()=>remove(t)}>削除</button>
+      </div>
     </article>)}</div>
   </>;
 }

@@ -389,3 +389,11 @@ body{background:#edf2f5}
 .mapLegend i.me{background:#ff4f9a}
 .mapCard b{font-size:16px;font-weight:900}
 .mapCard small{font-size:12px;color:var(--muted);font-weight:700}
+
+/* Admin moderation (step 16) */
+.adminRow{grid-template-columns:1fr auto}
+.adminRow b .adminStatus,.adminRow b .minorBadge{margin-left:6px;vertical-align:middle}
+.adminActions{display:flex;flex-wrap:wrap;gap:6px;justify-content:flex-end}
+.adminTagAdd{display:grid;grid-template-columns:1fr auto;gap:8px}
+.adminTagAdd input{width:100%;border:1px solid #d4e2ea;border-radius:11px;padding:10px;font:inherit}
+@media(max-width:420px){.adminRow{grid-template-columns:1fr}.adminActions{justify-content:flex-start}}
