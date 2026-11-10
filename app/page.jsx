@@ -161,7 +161,12 @@ export default function Page(){
 
   async function logout(){
     if(!window.confirm("ログアウトすると、この端末からは同じアカウントに戻れなくなります。本当にログアウトしますか？")) return;
-    await supabase.auth.signOut();
+    await signOutAndReset();
+  }
+
+  // Also used after 退会: the account is already gone, so the sign-out only clears this device.
+  async function signOutAndReset(){
+    await supabase.auth.signOut().catch(()=>{});
     setUserId(""); setClubs([]); setClubMembers([]); setProfile(null); setDirectory([]); setInvite(""); setTab("home"); setDetail(null); setAdminOpen(false); setMessage("");
   }
 
@@ -245,7 +250,7 @@ export default function Page(){
         {tab==="home"&&<Home ctx={ctx} profile={profile} others={others}/>}
         {tab==="people"&&<People ctx={ctx} others={others}/>}
         {tab==="community"&&<Community ctx={ctx}/>}
-        {tab==="me"&&<Me ctx={ctx} tagOptions={tagOptions} logout={logout} openAdmin={()=>setAdminOpen(true)} profile={profile} saveProfile={saveProfile} message={message}/>}
+        {tab==="me"&&<Me ctx={ctx} tagOptions={tagOptions} logout={logout} afterWithdraw={signOutAndReset} openAdmin={()=>setAdminOpen(true)} profile={profile} saveProfile={saveProfile} message={message}/>}
       </>}
       <nav className="bottomNav" aria-label="メインメニュー">
         {navItems.map(([id,label,icon])=><button key={id} className={!adminOpen&&tab===id?"active":""} aria-current={!adminOpen&&!detail&&tab===id?"page":undefined} onClick={()=>go(id)}>
@@ -696,9 +701,12 @@ function PopChoice({label,value,onChange,options}){
 // My page
 // ---------------------------------------------------------------------------
 
-function Me({ctx,tagOptions,logout,openAdmin,profile,saveProfile,message}){
+function Me({ctx,tagOptions,logout,afterWithdraw,openAdmin,profile,saveProfile,message}){
   const [editing,setEditing]=useState(false);
+  const [withdrawing,setWithdrawing]=useState(false);
   const person=toPerson(profile||{});
+
+  if(withdrawing) return <Withdraw ctx={ctx} onBack={()=>setWithdrawing(false)} onDone={afterWithdraw}/>;
 
   if(editing) return <div className="popPage popScreen">
     <Confetti/>
@@ -716,12 +724,83 @@ function Me({ctx,tagOptions,logout,openAdmin,profile,saveProfile,message}){
       {profile?.role==="admin"&&<button className="popSmallBtn ghost" onClick={openAdmin}>運営メニュー</button>}
     </div>
     {message&&<p className="popWarn" role="alert">{message}</p>}
-  </>} bottom={<MeFooter logout={logout}/>}/>;
+  </>} bottom={<MeFooter logout={logout} withdraw={()=>setWithdrawing(true)}/>}/>;
 }
 
-function MeFooter({logout}){
-  return <button className="popLogout" onClick={logout}>ログアウト</button>;
+function MeFooter({logout,withdraw}){
+  return <>
+    <button className="popLogout" onClick={logout}>ログアウト</button>
+    <button className="popWithdrawLink" onClick={withdraw}>退会する</button>
+  </>;
 }
+
+// 退会 (SPEC 4-6). Clubs where I am the only admin need a new admin chosen from their other
+// members (minors may be chosen); clubs where I am the only member are deleted with the account.
+function Withdraw({ctx,onBack,onDone}){
+  const {clubs,clubMembers,others,userId}=ctx;
+  const [picks,setPicks]=useState({});
+  const [busy,setBusy]=useState(false);
+  const [error,setError]=useState("");
+  const nameOf=id=>others.find(p=>p.id===id)?.name||"メンバー";
+
+  const mine=clubs.filter(c=>clubMembers.some(m=>m.club_id===c.id&&m.member_id===userId));
+  const alone=[],handover=[];
+  for(const c of mine){
+    const rest=clubMembers.filter(m=>m.club_id===c.id&&m.member_id!==userId);
+    const iAmAdmin=clubMembers.some(m=>m.club_id===c.id&&m.member_id===userId&&m.is_admin);
+    if(!rest.length) alone.push(c);
+    else if(iAmAdmin&&!rest.some(m=>m.is_admin)) handover.push({club:c,candidates:rest.map(m=>m.member_id)});
+  }
+  const ready=handover.every(h=>picks[h.club.id]);
+
+  async function submit(){
+    if(!ready||busy) return;
+    if(!window.confirm("本当に退会しますか？\nあなたのデータはすべて消え、元には戻せません。")) return;
+    setBusy(true); setError("");
+    const {error}=await supabase.rpc("withdraw",{p_handover:picks});
+    if(error){
+      setBusy(false);
+      setError(error.message?.includes("handover_required")||error.message?.includes("invalid_handover")
+        ?"クラブの様子が変わったようです。画面を開き直して、もう一度選んでください。"
+        :"退会できませんでした。時間をおいてもう一度お試しください。");
+      return;
+    }
+    await onDone();
+  }
+
+  return <div className="popPage popScreen">
+    <Confetti/>
+    <header className="popTopBar"><button onClick={onBack} aria-label="戻る">‹</button></header>
+    <div className="popStack">
+      <h1 className="popName">退会する</h1>
+      <section className="popCard withdrawWarn">
+        <h2>ご注意ください</h2>
+        <p>退会すると、あなたのプロフィール、属性タグ、よくいる場所、連絡先、所属がすべて消えます。元には戻せません。</p>
+        <p>もう一度使うには、新しい招待コードが必要です。</p>
+      </section>
+
+      {handover.map(({club,candidates})=><section key={club.id} className="popCard">
+        <h2>「{club.name}」の新しい管理者</h2>
+        <p className="popNote">あなたはこのクラブのただ1人の管理者です。メンバーの中から、新しい管理者を選んでください。</p>
+        <select className="popSelect" value={picks[club.id]||""} onChange={e=>setPicks(p=>({...p,[club.id]:e.target.value}))} aria-label={`${club.name}の新しい管理者`}>
+          <option value="">選んでください</option>
+          {candidates.map(id=><option key={id} value={id}>{nameOf(id)}</option>)}
+        </select>
+      </section>)}
+
+      {alone.length>0&&<section className="popCard">
+        <h2>一緒に削除されるクラブ</h2>
+        <p className="popNote">ほかにメンバーがいないため、次のクラブも一緒に削除されます。</p>
+        <ul className="withdrawList">{alone.map(c=><li key={c.id}>{c.name}</li>)}</ul>
+      </section>}
+
+      {!ready&&<p className="popWarn">すべてのクラブで新しい管理者を選ぶと、退会できます。</p>}
+      {error&&<p className="popWarn" role="alert">{error}</p>}
+      <button className="popBtn danger" disabled={!ready||busy} onClick={submit}>{busy?"退会しています…":"退会する"}</button>
+    </div>
+  </div>;
+}
+
 
 function ProfileForm({initial,minor,tagOptions=[],saveProfile,submitLabel,onSaved}){
   const [form,setForm]=useState({
